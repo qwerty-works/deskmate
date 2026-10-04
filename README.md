@@ -137,7 +137,8 @@ verified afterward. If a push or cleanup fails, the console reports it and exits
 nonzero; old pages remain until removed or their existing lifetime expires.
 Disabled `codex` must be enabled using AWTRIX's own controls.
 
-Each invocation queries fresh data. The optional Pi cron job below runs hourly.
+Each invocation queries fresh data. The optional Pi cron job below runs every
+10 minutes from 6:00am through 8:00pm Eastern time.
 The app disappears when its lifetime runs out or AWTRIX reboots; the next
 successful run recreates it. There is no persistent Python daemon, database,
 Docker, UI, Berry application, or firmware modification.
@@ -147,26 +148,29 @@ the blue and purple bars match their values, and `codex` rotates normally alongs
 your other apps. HTTP success and a screen-pixel API readback cannot establish
 physical brightness or legibility.
 
-## Hourly updates on the Pi
+## Scheduled updates on the Pi
 
 This is optional. After verifying a manual run, replace every example path with
-your checkout path and install this line with `crontab -e` as the Pi user:
+your checkout path and install these entries with `crontab -e` as the Pi user:
 
 ```cron
-0 * * * * /usr/bin/flock -n /home/your-user/deskmate/.widget.lock /home/your-user/deskmate/.venv/bin/python /home/your-user/deskmate/src/main.py >> /home/your-user/deskmate/widget.log 2>&1 # deskmate-codex
+CRON_TZ=America/New_York
+*/10 6-19 * * * /usr/bin/flock -n /home/your-user/deskmate/.widget.lock /home/your-user/deskmate/.venv/bin/python /home/your-user/deskmate/src/main.py >> /home/your-user/deskmate/widget.log 2>&1 # deskmate-codex
+0 20 * * * /usr/bin/flock -n /home/your-user/deskmate/.widget.lock /home/your-user/deskmate/.venv/bin/python /home/your-user/deskmate/src/main.py >> /home/your-user/deskmate/widget.log 2>&1 # deskmate-codex
 ```
 
-It runs at the start of each hour using the Pi's timezone and resumes after reboot.
+It runs every 10 minutes from 6:00am through 7:50pm, plus once at 8:00pm,
+using Eastern time (including daylight saving time), and resumes after reboot.
 The virtual environment and project `.env` are used without shell activation.
 `flock` prevents overlapping runs. Check `crontab -l` and
-`tail -n 20 /home/your-user/deskmate/widget.log` on the Pi. Remove the
-line with `crontab -e` to stop hourly updates.
+`tail -n 20 /home/your-user/deskmate/widget.log` on the Pi. Remove both entries
+with `crontab -e` to stop scheduled updates.
 
 The Mac must have Remote Login enabled and accept the Pi's SSH key without a
 password. Sleeping/offline Mac or network failures are logged; cron tries again
-next hour. The display may disappear between refreshes when the one-hour
-freshness lifetime expires or a usage window resets. Failed queries never push
-invented values or extend the previous reading's lifetime.
+at the next scheduled fetch. The display may disappear between refreshes when
+the one-hour freshness lifetime expires or a usage window resets. Failed queries
+never push invented values or extend the previous reading's lifetime.
 
 ## Tests and manual updates
 
