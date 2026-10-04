@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "display": "32x8",
+  "animations": [
+    {
+      "id": "bat-outta-here",
+      "name": "Bat Outta Here",
+      "description": "A late little bat races to catch the swarm.",
+      "durationMs": 5000,
+      "sourceBytes": 2329,
+      "distinctFrames": 91
+    },
+    {
+      "id": "boo-cruise",
+      "name": "Boo Cruise",
+      "description": "A curious ghost takes the scenic route.",
+      "durationMs": 5000,
+      "sourceBytes": 2024,
+      "distinctFrames": 53
+    },
+    {
+      "id": "pumpkin-chomp",
+      "name": "Pumpkin Chomp",
+      "description": "A toothy pumpkin bites off more than it can chew.",
+      "durationMs": 5000,
+      "sourceBytes": 2423,
+      "distinctFrames": 30
+    },
+    {
+      "id": "slime-time",
+      "name": "Slime Time",
+      "description": "Drip, bubble, flood, and disappear.",
+      "durationMs": 5000,
+      "sourceBytes": 1876,
+      "distinctFrames": 71
+    },
+    {
+      "id": "web-pull",
+      "name": "Web Pull",
+      "description": "Two tiny spiders put on a bouncy curtain call.",
+      "durationMs": 5000,
+      "sourceBytes": 1753,
+      "distinctFrames": 40
+    },
+    {
+      "id": "whos-there",
+      "name": "Who\u2019s There?",
+      "description": "A pair of eyes discovers it has company.",
+      "durationMs": 5000,
+      "sourceBytes": 2067,
+      "distinctFrames": 18
+    }
+  ]
+}
