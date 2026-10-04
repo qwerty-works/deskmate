@@ -10,3 +10,8 @@ __pycache__/
 # Local hourly widget output and overlap lock.
 /widget.log
 /.widget.lock
+
+# Private Google OAuth client and refresh token; never publish these.
+/.google-calendar/
+/calendar.log
+/.calendar.lock
