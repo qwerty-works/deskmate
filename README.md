@@ -3,6 +3,10 @@
 One command queries real Codex usage and sends one `codex` pushed app to the TC001.
 AWTRIX owns displaying it and rotating it alongside your other apps.
 
+An independent [Google Calendar widget](docs/google-calendar.md) shows your next
+event's local time and title, or `In progress` during a meeting. It runs on the
+Pi every minute and hides when the next 24 hours are clear.
+
 The selected 32×8 layout shows everything at once:
 
 - A pale terminal prompt icon on the left.
@@ -19,7 +23,8 @@ count. There is no reset bar because Codex provides no total reset allowance.
 ## Setup and run
 
 Run directly on a computer with an authenticated Codex CLI; a Raspberry Pi is
-optional. Requires Python **3.9+**. From the project directory:
+optional. Installing the full requirements now requires Python **3.10+**;
+**3.11+** is recommended for ongoing Google library support. From the project directory:
 
 ```sh
 python3 -m venv .venv
@@ -29,8 +34,9 @@ cp .env.example .env
 python src/main.py
 ```
 
-The only package dependency is `python-dotenv`; HTTP, parsing, and SSH orchestration
-use the Python standard library. On Raspberry Pi OS, install `python3-venv` with
+The Codex command uses `python-dotenv` and the Python standard library for HTTP,
+parsing, and SSH orchestration. Calendar authentication and fetching use Google's
+Python client libraries. On Raspberry Pi OS, install `python3-venv` with
 `sudo apt install python3-venv` if virtual-environment creation requires it.
 
 The machine being queried needs a current Codex CLI with `app-server --stdio`
