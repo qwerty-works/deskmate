@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "display": "32x8",
   "animations": [
     {
@@ -7,6 +7,7 @@
       "name": "Bat Outta Here",
       "description": "A late little bat races to catch the swarm.",
       "durationMs": 5000,
+      "style": "PIXEL CARTOON",
       "sourceBytes": 2329,
       "distinctFrames": 91
     },
@@ -15,6 +16,7 @@
       "name": "Boo Cruise",
       "description": "A curious ghost takes the scenic route.",
       "durationMs": 5000,
+      "style": "PIXEL CARTOON",
       "sourceBytes": 2024,
       "distinctFrames": 53
     },
@@ -23,6 +25,7 @@
       "name": "Pumpkin Chomp",
       "description": "A toothy pumpkin bites off more than it can chew.",
       "durationMs": 5000,
+      "style": "PIXEL CARTOON",
       "sourceBytes": 2423,
       "distinctFrames": 30
     },
@@ -31,6 +34,7 @@
       "name": "Slime Time",
       "description": "Drip, bubble, flood, and disappear.",
       "durationMs": 5000,
+      "style": "PIXEL CARTOON",
       "sourceBytes": 1876,
       "distinctFrames": 71
     },
@@ -39,6 +43,7 @@
       "name": "Web Pull",
       "description": "Two tiny spiders put on a bouncy curtain call.",
       "durationMs": 5000,
+      "style": "PIXEL CARTOON",
       "sourceBytes": 1753,
       "distinctFrames": 40
     },
@@ -47,8 +52,54 @@
       "name": "Who\u2019s There?",
       "description": "A pair of eyes discovers it has company.",
       "durationMs": 5000,
+      "style": "PIXEL CARTOON",
       "sourceBytes": 2067,
       "distinctFrames": 18
+    },
+    {
+      "id": "witching-hour",
+      "name": "Witching Hour",
+      "description": "A storybook witch swoops past the moon on a star-dusted broom.",
+      "durationMs": 5000,
+      "style": "STORYBOOK",
+      "sourceBytes": 2030,
+      "distinctFrames": 85
+    },
+    {
+      "id": "bone-boogie",
+      "name": "Bone Boogie",
+      "description": "A rubber-hose skeleton kicks, shimmies, and takes a bow.",
+      "durationMs": 5000,
+      "style": "RUBBER HOSE",
+      "sourceBytes": 2202,
+      "distinctFrames": 48
+    },
+    {
+      "id": "knock-knock",
+      "name": "Knock Knock",
+      "description": "A cinematic haunted door creaks open to a surprise visitor.",
+      "durationMs": 5000,
+      "style": "CINEMATIC",
+      "sourceBytes": 2230,
+      "distinctFrames": 45
+    },
+    {
+      "id": "hex-spin",
+      "name": "Hex Spin",
+      "description": "Geometric spell rings spiral into a tiny magical singularity.",
+      "durationMs": 5000,
+      "style": "GEOMETRIC",
+      "sourceBytes": 1771,
+      "distinctFrames": 191
+    },
+    {
+      "id": "crawl-call",
+      "name": "Crawl Call",
+      "description": "A stop-motion hand tiptoes across the screen and gives a wave.",
+      "durationMs": 5000,
+      "style": "STOP MOTION",
+      "sourceBytes": 2219,
+      "distinctFrames": 57
     }
   ]
 }
