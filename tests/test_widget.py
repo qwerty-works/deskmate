@@ -3,6 +3,7 @@
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 import io
+import base64
 import json
 import os
 from pathlib import Path
@@ -163,6 +164,18 @@ class AwtrixTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "acknowledge"):
             client.push_app("codex", {"text": "CODEX 34%"})
 
+    def test_delete_protocol_and_acknowledgement(self):
+        client = Awtrix("http://clock")
+        self.response(client, {"ok": True})
+        self.assertEqual(client.delete_app("codex_week"), 200)
+        request = client.http.open.call_args.args[0]
+        self.assertEqual(request.full_url, "http://clock/api/v1/apps/codex_week")
+        self.assertEqual(request.get_method(), "DELETE")
+        self.assertIsNone(request.data)
+        self.response(client, {"ok": False})
+        with self.assertRaisesRegex(ValueError, "acknowledge deletion"):
+            client.delete_app("codex_week")
+
     def test_http_and_connection_failures(self):
         client = Awtrix("http://clock")
         failures = [HTTPError("http://clock", 422, "Invalid", {}, io.BytesIO(b'bad payload')),
@@ -186,26 +199,72 @@ class AwtrixTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
-    def test_unknown_values_are_not_zero(self):
+    def pixels(self, data):
+        pages = main.payloads(data, 1000)
+        self.assertEqual(list(pages), ["codex"])
+        page = pages["codex"]
+        self.assertEqual(page["lifetimeMs"], 1000)
+        bitmap = page["draw"][0]
+        self.assertEqual(bitmap[:5], ["bitmap", 0, 0, 32, 8])
+        rgb = base64.b64decode(bitmap[5], validate=True)
+        self.assertEqual(len(rgb), 32 * 8 * 3)
+        self.assertLess(len(json.dumps(page).encode()), 8192)
+        return [rgb[i:i+3] for i in range(0,len(rgb),3)]
+
+    def test_remaining_percentage_conversion(self):
+        self.assertEqual(main.rounded_remaining({"used_percent": 67}), 33)
+        self.assertEqual(main.rounded_remaining({"used_percent": 58}), 42)
+        self.assertEqual(main.rounded_remaining({"used_percent": 0}), 100)
+        self.assertEqual(main.rounded_remaining({"used_percent": 100}), 0)
+        self.assertEqual(main.rounded_remaining({"used_percent": 34.5}), 66)
+        self.assertIsNone(main.rounded_remaining(None))
+
+    def test_selected_layout_and_bar_lengths(self):
+        data = snapshot(used=51)
+        data["secondary"]["used_percent"] = 55
+        pixels = self.pixels(data)
+        blue = bytes.fromhex("38bdf8")
+        purple = bytes.fromhex("c084fc")
+        self.assertEqual(sum(pixels[7*32+x] == blue for x in range(4,15)), 5)
+        self.assertEqual(sum(pixels[7*32+x] == purple for x in range(16,27)), 5)
+        self.assertEqual(pixels[1*32+0], bytes.fromhex("d7f8ee"))
+        self.assertEqual(pixels[6*32+1], bytes.fromhex("d7f8ee"))
+        self.assertEqual(pixels[1*32+28], bytes.fromhex("fbbf24"))
+        # Empty separator columns distinguish the three values.
+        self.assertTrue(all(pixels[y*32+x] == b"\0\0\0" for y in range(8) for x in (3,15,27)))
+
+    def test_unknown_values_have_question_marks_and_no_bar(self):
         data = snapshot()
         data["secondary"] = None
         data["available_resets"] = None
-        pages = main.payloads(data, 1000)
-        self.assertEqual(pages["codex_week"]["text"], "7D N/A")
-        self.assertNotIn("progress", pages["codex_week"])
-        self.assertEqual(pages["codex_resets"]["text"], "RST N/A")
-        self.assertNotIn("progress", pages["codex_resets"])
+        pixels = self.pixels(data)
+        self.assertTrue(all(pixels[7*32+x] == b"\0\0\0" for x in range(16,27)))
+        self.assertEqual(pixels[1*32+16], bytes.fromhex("c084fc"))
+        self.assertEqual(pixels[1*32+28], bytes.fromhex("fbbf24"))
 
-    def test_bar_endpoints_and_zero_resets(self):
+    def test_all_percentage_values_fit_and_bars_match(self):
+        for used in range(101):
+            with self.subTest(used=used):
+                data = snapshot(used=used)
+                data["secondary"]["used_percent"] = 100-used
+                pixels = self.pixels(data)
+                self.assertEqual(sum(pixels[7*32+x] == bytes.fromhex("38bdf8") for x in range(4,15)),
+                                 int(11*(100-used)/100+0.5))
         data = snapshot(used=0)
-        data["secondary"]["used_percent"] = 100
-        data["available_resets"] = 0
-        pages = main.payloads(data, 1000)
-        self.assertEqual(pages["codex"]["progress"], 0)
-        self.assertEqual(pages["codex_week"]["progress"], 100)
-        self.assertEqual(pages["codex_resets"]["text"], "RST 0")
-        self.assertTrue(all(page["lifetimeMs"] == 1000 for page in pages.values()))
+        pixels = self.pixels(data)
+        # The percent sign remains present at 100, in the last three columns.
+        self.assertEqual(pixels[1*32+12], bytes.fromhex("38bdf8"))
+        self.assertEqual(pixels[1*32+14], bytes.fromhex("38bdf8"))
 
+    def test_reset_overflow_is_marked_without_clipping(self):
+        for count in (0, 9, 10, 999):
+            with self.subTest(count=count):
+                data = snapshot()
+                data["available_resets"] = count
+                pixels = self.pixels(data)
+                if count >= 10:
+                    self.assertEqual(pixels[3*32+28], bytes.fromhex("fbbf24"))
+                    self.assertEqual(pixels[3*32+29], bytes.fromhex("fbbf24"))
 
     def test_success_and_shell_configuration_precedence(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -220,22 +279,37 @@ class CommandTests(unittest.TestCase):
                 client.host = "http://from-shell"
                 app = {"name": "codex", "origin": "pushed", "present": True,
                        "enabled": True, "inLoop": True}
-                apps = [dict(app, name=name) for name in ("codex", "codex_week", "codex_resets")]
-                client.list_apps.side_effect = [(200, []), (200, apps)]
+                client.list_apps.side_effect = [(200, []), (200, [app])]
                 client.push_app.return_value = 200
                 main.run()
                 factory.assert_called_once_with("http://from-shell")
                 reader.assert_called_once_with(None, None)
-                self.assertEqual(client.push_app.call_count, 3)
-                calls = client.push_app.call_args_list
-                self.assertEqual(calls[0].args, ("codex", {
-                    "text": "5H 35%", "progress": 35, "progressColor": "#00AAFF",
-                    "progressTrackColor": "#202020", "lifetimeMs": 90000, "lifetimeExpiry": "remove"}))
-                self.assertEqual(calls[1].args[1]["text"], "7D 53%")
-                self.assertEqual(calls[1].args[1]["progress"], 53)
-                self.assertEqual(calls[2].args[1]["text"], "RST 3")
-                self.assertNotIn("progress", calls[2].args[1])
+                client.push_app.assert_called_once()
+                args = client.push_app.call_args.args
+                self.assertEqual(args[0], "codex")
+                self.assertEqual(args[1]["lifetimeMs"], 90000)
+                self.assertIn("5H 66% left", output.getvalue())
                 self.assertIn("Verified codex", output.getvalue())
+                client.delete_app.assert_not_called()
+
+    def test_old_pages_removed_only_after_new_page_verified(self):
+        with patch("main.load_dotenv"), patch.dict(os.environ, {}, clear=True), \
+                patch("main.read_usage", return_value=snapshot()), \
+                patch("codex.time.time", return_value=NOW), patch("main.Awtrix") as factory, \
+                redirect_stdout(io.StringIO()):
+            client = factory.return_value
+            client.host = "http://clock"
+            page = {"name": "codex", "origin": "pushed", "present": True, "enabled": True, "inLoop": True}
+            old = [{"name": "codex_week", "origin": "pushed", "present": True},
+                   {"name": "codex_resets", "origin": "script", "present": True}]
+            client.list_apps.side_effect = [(200, old), (200, [page]+old), (200, [page,old[1]])]
+            client.push_app.return_value = 200
+            client.delete_app.return_value = 200
+            main.run()
+            client.delete_app.assert_called_once_with("codex_week")
+            methods = [call[0] for call in client.mock_calls]
+            self.assertLess(methods.index("push_app"), methods.index("delete_app"))
+            self.assertEqual(methods[:3], ["list_apps", "push_app", "list_apps"])
 
     def test_stale_source_never_contacts_awtrix(self):
         with patch("main.load_dotenv"), patch.dict(os.environ, {}, clear=True), \
@@ -257,13 +331,14 @@ class CommandTests(unittest.TestCase):
                 client.push_app.return_value = 200
                 with self.assertRaisesRegex(ValueError, "not verified"):
                     main.run()
+                client.delete_app.assert_not_called()
 
     def test_existing_script_is_not_overwritten(self):
         with patch("main.load_dotenv"), patch.dict(os.environ, {}, clear=True), \
                 patch("main.read_usage", return_value=snapshot()), \
                 patch("codex.time.time", return_value=NOW), patch("main.Awtrix") as factory:
             client = factory.return_value
-            client.list_apps.return_value = (200, [{"name": "codex_week", "origin": "script"}])
+            client.list_apps.return_value = (200, [{"name": "codex", "origin": "script"}])
             with self.assertRaisesRegex(ValueError, "refusing"):
                 main.run()
             client.push_app.assert_not_called()

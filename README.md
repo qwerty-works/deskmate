@@ -1,17 +1,25 @@
 # Desk Mate
 
-One command queries real Codex account usage and sends three pushed apps to the
-TC001. AWTRIX owns rendering, scrolling, and app rotation:
+One command queries real Codex usage and sends one `codex` pushed app to the TC001.
+AWTRIX owns displaying it and rotating it alongside your other apps.
 
-| App | Example text | Bar |
-| --- | --- | --- |
-| `codex` | `5H 51%` | Five-hour percentage used |
-| `codex_week` | `7D 55%` | Seven-day percentage used |
-| `codex_resets` | `RST 3` | Count only: Codex provides no maximum |
+The selected 32×8 layout shows everything at once:
 
-## Setup and run (macOS or Raspberry Pi)
+- A pale terminal prompt icon on the left.
+- Blue five-hour percentage **remaining**, with its own bottom-row bar.
+- Purple seven-day percentage **remaining**, with its own bottom-row bar.
+- Gold available reset count on the right.
 
-Requires Python **3.9+**. From the project directory:
+For example: terminal icon → **33% · 42% · 3**. The two usage regions are each
+11 pixels wide; bars round to the nearest pixel. All text uses compact 3×5 glyphs,
+with a condensed `100%` at the upper limit. A missing value is `?`; missing usage
+has no bar. Reset counts of ten or more show `+`; the console prints the exact
+count. There is no reset bar because Codex provides no total reset allowance.
+
+## Setup and run
+
+Run directly on a computer with an authenticated Codex CLI; a Raspberry Pi is
+optional. Requires Python **3.9+**. From the project directory:
 
 ```sh
 python3 -m venv .venv
@@ -65,7 +73,7 @@ comes back. SSH connects within five seconds and the entire read has a 30-second
 timeout. It never asks for passwords or copies credentials/transcripts. The Mac
 must be awake and reachable. The reader searches `PATH`, then `~/.local/bin/codex`;
 make Codex available there in the Mac's noninteractive SSH environment.
-No Pi deployment has been verified yet.
+Pi-over-SSH execution has been verified with Raspberry Pi OS and macOS.
 
 ## Where usage comes from
 
@@ -77,13 +85,15 @@ the credential files. No model turn is started, and no reset is consumed.
 The official [Codex app-server API](https://learn.chatgpt.com/docs/app-server)
 provides percentage **used**, window length, reset timestamps, and
 `rateLimitResetCredits.availableCount`. The count is authoritative; the credit
-detail list may be incomplete. A missing reset count is displayed as `RST N/A`,
-never zero. A missing weekly window is displayed as `7D N/A`, with no bar.
+detail list may be incomplete. A missing reset count or weekly window is displayed as `?`, never zero.
+Unknown usage has no bar.
 
 Your account reports a **seven-day** secondary window, not five days. The reader
 checks the window lengths rather than relabeling a different window as weekly.
-`5H 51%` means 51% of the five-hour allowance used, not 51% remaining. Text and
-bars use the same rounded value (halves rounded up). Resets are an available count;
+The display converts the API’s percentage used to percentage remaining
+(`100 - used_percent`). Blue means five-hour allowance left; purple means
+seven-day allowance left. Text and bars use the same rounded remaining value
+(halves rounded up), so a full bar means the allowance is entirely available. Resets are an available count;
 there is no total from which to compute a meaningful percentage.
 
 V1 used local session snapshots, which omitted reset credits. This version uses
@@ -98,35 +108,59 @@ nonzero before any push. Future-dated, expired, or stale metrics are also reject
 The client follows the official AWTRIX NG
 [HTTP API](https://ang.blueforcer.de/reference/http/) and
 [payload reference](https://ang.blueforcer.de/reference/payload/).
-Each page uses `PUT /api/v1/apps/pushed/{name}`. For example:
+The single screen uses `PUT /api/v1/apps/pushed/codex` with a `draw` command:
 
-```json
-{"text":"5H 51%","progress":51,"progressColor":"#00AAFF","progressTrackColor":"#202020","lifetimeMs":3600000,"lifetimeExpiry":"remove"}
+```text
+{"draw":[["bitmap",0,0,32,8,"<base64 RGB888 pixels>"]],"lifetimeMs":3600000,"lifetimeExpiry":"remove"}
 ```
 
-AWTRIX draws its native progress bar along the bottom row: blue filled portion,
-dark empty track. Separate pushed apps let AWTRIX rotate each value with its own
-bar, without custom rendering. The existing `codex` app becomes the five-hour
-page; `codex_week` and `codex_resets` are added. Other apps and rotation settings
-are preserved.
+The icon, numbers, and two independent bars are encoded in one small bitmap
+(768 RGB bytes before base64), using AWTRIX's normal drawing API. No downloaded
+icon, extra rendering dependency, device script, or scrolling is needed. AWTRIX
+still handles the app loop. Other apps and rotation settings are preserved.
 
-Lifetimes are computed before each push: the smaller of the remaining age
-allowance and time until either known usage window resets. Rerunning updates the
-same three apps. A preflight refuses to replace scripts with any of those names.
-Each push requires a successful HTTP status and `{"ok":true}`; afterward
-`GET /api/v1/apps` must confirm all three are present, pushed, enabled, and in the
-loop. Pushes are sequential: an error can leave earlier pages updated. The console
-prints each acknowledged push and exits nonzero on failure. Disabled pages must
-be enabled using AWTRIX's own controls.
+Lifetime is the smaller of the remaining age allowance and time until either
+known usage window resets. Rerunning updates the same `codex` app. A preflight
+refuses to replace a non-pushed app named `codex`. A push requires a successful
+HTTP status and `{"ok":true}`; `GET /api/v1/apps` must confirm the replacement is
+present, pushed, enabled, and in the loop.
 
-Values update only when rerun. Pages disappear when their lifetimes run out or
-AWTRIX reboots; rerun to recreate them. There is no scheduler, persistent daemon,
-database, Docker, UI, Berry application, or firmware modification.
+Only after this verification, the old `codex_week` and `codex_resets` pushed pages
+are deleted if present. Scripts with those names are left alone. Cleanup is
+verified afterward. If a push or cleanup fails, the console reports it and exits
+nonzero; old pages remain until removed or their existing lifetime expires.
+Disabled `codex` must be enabled using AWTRIX's own controls.
 
-On the **physical TC001**, confirm both percentage texts are readable, blue bars
-match their values without covering the text, and `RST 3` rotates normally
-alongside your existing apps. Text scrolls using AWTRIX defaults if needed.
-HTTP acceptance and app-list verification do not prove physical appearance.
+Each invocation queries fresh data. The optional Pi cron job below runs hourly.
+The app disappears when its lifetime runs out or AWTRIX reboots; the next
+successful run recreates it. There is no persistent Python daemon, database,
+Docker, UI, Berry application, or firmware modification.
+
+On the **physical TC001**, confirm the small numbers and terminal icon are readable,
+the blue and purple bars match their values, and `codex` rotates normally alongside
+your other apps. HTTP success and a screen-pixel API readback cannot establish
+physical brightness or legibility.
+
+## Hourly updates on the Pi
+
+This is optional. After verifying a manual run, replace every example path with
+your checkout path and install this line with `crontab -e` as the Pi user:
+
+```cron
+0 * * * * /usr/bin/flock -n /home/your-user/deskmate/.widget.lock /home/your-user/deskmate/.venv/bin/python /home/your-user/deskmate/src/main.py >> /home/your-user/deskmate/widget.log 2>&1 # deskmate-codex
+```
+
+It runs at the start of each hour using the Pi's timezone and resumes after reboot.
+The virtual environment and project `.env` are used without shell activation.
+`flock` prevents overlapping runs. Check `crontab -l` and
+`tail -n 20 /home/your-user/deskmate/widget.log` on the Pi. Remove the
+line with `crontab -e` to stop hourly updates.
+
+The Mac must have Remote Login enabled and accept the Pi's SSH key without a
+password. Sleeping/offline Mac or network failures are logged; cron tries again
+next hour. The display may disappear between refreshes when the one-hour
+freshness lifetime expires or a usage window resets. Failed queries never push
+invented values or extend the previous reading's lifetime.
 
 ## Tests and manual updates
 

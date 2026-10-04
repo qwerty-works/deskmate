@@ -50,3 +50,11 @@ class Awtrix:
         if not isinstance(body, list) or not all(isinstance(app, dict) for app in body):
             raise ValueError("AWTRIX returned an invalid app list")
         return status, body
+
+    def delete_app(self, name):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", name):
+            raise ValueError("Invalid AWTRIX app name")
+        status, body = self._request("DELETE", "/api/v1/apps/" + name)
+        if not isinstance(body, dict) or body.get("ok") is not True:
+            raise ValueError("AWTRIX did not acknowledge deletion: " + repr(body))
+        return status
