@@ -60,6 +60,31 @@ Leave `CODEX_HOME` blank for the normal location. The reader also honors the rem
 Mac's existing `CODEX_HOME` environment variable when no explicit path is supplied.
 Use an absolute path if your Mac stores Codex data elsewhere.
 
+## Privacy and security
+
+This project is designed for a private, trusted display. The Google Calendar
+integration requests only read-only access to the primary calendar and sends the
+selected event title and time to the AWTRIX display. The title may be visible to
+anyone who can see the display; that is expected for a desk display and is not
+written to the application logs. The integration never creates, edits, or deletes
+calendar events.
+
+OAuth client files, refresh tokens, and `.env` are local secrets. They are ignored
+by Git and should never be committed, pasted into issues, or included in a public
+archive. The token directory is created with mode `700` and token files with mode
+`600`.
+
+The AWTRIX HTTP API is a privileged local control plane: Desk Mate can change
+settings, app order, and scripts. Keep the clock on a trusted LAN or otherwise
+protect its API; do not expose `AWTRIX_HOST` to the public internet. HTTP is
+acceptable only when the network is trusted. Use the device's authentication and
+HTTPS options when the network is shared or untrusted.
+
+The repository contains synthetic test titles and token-shaped placeholder values,
+not real calendar data or credentials. Before publishing a fork, check local
+`.env`, `.google-calendar/`, logs, and custom credential paths even though the
+standard paths are Git-ignored.
+
 ### Running on the Pi using your Mac's data
 
 The Pi needs LAN access to AWTRIX and SSH key access to the Mac. Enable **Remote
@@ -178,6 +203,27 @@ never push invented values or extend the previous reading's lifetime.
 source .venv/bin/activate
 python -m unittest discover -s tests -v
 ```
+
+## Overnight Pixel Fireplace mode
+
+Install `packs/halloween/pixel-fireplace.be` in the AWTRIX NG Scripts page once,
+or let `idle_mode.py enter` install it through the HTTP API. The controller keeps
+the current brightness and app loop in a private state file, dims the display to
+10/255 by default, and restores both at 6:00am.
+
+The schedule uses New York time and can be adjusted with `IDLE_TIMEZONE`,
+`IDLE_BRIGHTNESS`, and `IDLE_STATE_PATH`. Add these entries to the Pi user's
+crontab, replacing the checkout path:
+
+```cron
+CRON_TZ=America/New_York
+0 20 * * * /usr/bin/flock -n /home/your-user/deskmate/.idle-mode.lock /home/your-user/deskmate/.venv/bin/python /home/your-user/deskmate/src/idle_mode.py enter >> /home/your-user/deskmate/idle-mode.log 2>&1
+0 6 * * * /usr/bin/flock -n /home/your-user/deskmate/.idle-mode.lock /home/your-user/deskmate/.venv/bin/python /home/your-user/deskmate/src/idle_mode.py exit >> /home/your-user/deskmate/idle-mode.log 2>&1
+@reboot /usr/bin/flock -n /home/your-user/deskmate/.idle-mode.lock /home/your-user/deskmate/.venv/bin/python /home/your-user/deskmate/src/idle_mode.py sync >> /home/your-user/deskmate/idle-mode.log 2>&1
+```
+
+The controller refuses to replace a non-script app named `pixel-fireplace`,
+and verifies the script is present, enabled, and in the loop after entry.
 
 After changing code, rerun the tests and `python src/main.py`. For another checkout
 on the Pi, commit/push the intended changes from your development machine, then:
