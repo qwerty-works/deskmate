@@ -18,6 +18,25 @@ The calendar is read-only; the integration never creates or changes events.
 If the spring DST change brings an event two local dates ahead into the 24-hour
 window, its month and day are shown instead of the word `Tomorrow`.
 
+## Privacy and network security
+
+The read-only scope still exposes calendar event metadata to this application:
+the next eligible event's title and time are sent to the AWTRIX display. Anyone
+who can see the display can see that text. This is intentional for a private desk
+display; use a generic title policy such as `Busy` if the display is later moved
+to a shared or public space. Event titles are not written to the application log.
+
+The OAuth token and client files are secrets. Keep `.google-calendar/` outside
+source control and transfer tokens only over a protected channel. The documented
+setup uses a `700` directory and `600` files, and the repository ignores the
+standard directory. Custom paths must be protected and kept out of Git as well.
+
+The AWTRIX host is a privileged local API because this project can push pages and
+change the clock's app state. A trusted apartment LAN is an appropriate boundary
+for personal use, but the clock should not be port-forwarded or exposed directly
+to the internet. On shared networks, enable AWTRIX authentication and HTTPS if
+available, and configure `AWTRIX_HOST` accordingly.
+
 ## 1. Create the Google OAuth client
 
 Use Python **3.10+** on the Mac and Pi; **3.11+** is recommended. In the
