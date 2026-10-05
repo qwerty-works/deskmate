@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "display": "32x8",
+  "animations": [
+    {
+      "id": "aurora-tide",
+      "name": "Aurora Tide",
+      "description": "A luminous aurora sweeps across the display in teal, blue, violet, and coral.",
+      "durationMs": 3000,
+      "style": "GRADIENT WAVES"
+    },
+    {
+      "id": "ocean-drops",
+      "name": "Ocean Drops",
+      "description": "Layered ocean ripples expand and roll across the full display.",
+      "durationMs": 5000,
+      "style": "OCEAN RIPPLE"
+    },
+    {
+      "id": "prism-loom",
+      "name": "Prism Loom",
+      "description": "Color curtains weave around a bright seam, then resolve into a warm glow.",
+      "durationMs": 3000,
+      "style": "COLOR CURTAINS"
+    }
+  ]
+}
