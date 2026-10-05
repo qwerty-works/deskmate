@@ -99,7 +99,7 @@ Refresh saves use an owner-only temporary file and atomic replacement.
 Add these settings to the Pi's existing `.env` without overwriting its Codex settings:
 
 ```dotenv
-AWTRIX_HOST=http://192.168.4.94
+AWTRIX_HOST=http://your-awtrix-host
 GOOGLE_CALENDAR_CREDENTIALS_PATH=.google-calendar/credentials.json
 GOOGLE_CALENDAR_TOKEN_PATH=.google-calendar/token.json
 GOOGLE_CALENDAR_TIMEZONE=America/New_York
@@ -107,7 +107,8 @@ GOOGLE_CALENDAR_TIMEZONE=America/New_York
 
 Relative paths are resolved from the checkout, regardless of the working directory.
 An existing shell variable takes precedence over `.env`. The display timezone
-must be an IANA name; event comparisons use UTC to handle DST correctly.
+must be an IANA name; event comparisons use UTC to handle DST correctly. Replace
+`your-awtrix-host` with the hostname or address of your clock on the Pi's network.
 
 ```sh
 cd /home/your-user/deskmate

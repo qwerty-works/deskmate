@@ -51,7 +51,7 @@ loaded relative to the project, even when you run the script from another direct
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AWTRIX_HOST` | `http://192.168.4.94` | AWTRIX NG base URL |
+| `AWTRIX_HOST` | Built-in fallback | Set this to your AWTRIX NG base URL |
 | `CODEX_MAX_AGE_SECONDS` | `3600` | Maximum age of returned metrics and display lifetime, in seconds |
 | `CODEX_SSH_HOST` | empty | Query locally, or use `user@mac` / an SSH config alias |
 | `CODEX_HOME` | `~/.codex` | Codex data directory; in SSH mode this is on the Mac |
