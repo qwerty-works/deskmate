@@ -39,7 +39,7 @@ class IdleModeTests(unittest.TestCase):
 
     def test_enter_saves_brightness_and_is_repeatable(self):
         client = Mock()
-        client.list_apps.side_effect = [(200, []), (200, []), (200, [{"name": "pixel-fireplace", "origin": "script",
+        client.list_apps.side_effect = [(200, []), (200, []), (200, [{"name": "Pixel-Fireplace", "origin": "script",
                                                                        "enabled": True, "inLoop": True, "present": True}])]
         client.get_settings.return_value = (200, {"brightness": 120, "autoBrightness": True})
         with tempfile.TemporaryDirectory() as temp:
@@ -47,15 +47,17 @@ class IdleModeTests(unittest.TestCase):
             enter(client, path, 10)
             state = json.loads(path.read_text())
             self.assertEqual(state, {"active": True, "brightness": 120, "autoBrightness": True,
-                                     "order": [], "disabled": []})
+                                     "order": [], "disabled": [], "activeApp": None})
 
     def test_exit_restores_and_removes_state(self):
         client = Mock()
-        client.list_apps.return_value = (200, [{"name": "pixel-fireplace", "origin": "script",
+        client.list_apps.return_value = (200, [{"name": "Pixel-Fireplace", "origin": "script",
                                                 "enabled": True, "inLoop": True, "present": True}])
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "state.json"
-            path.write_text(json.dumps({"active": True, "brightness": 120, "autoBrightness": True}))
+            path.write_text(json.dumps({"active": True, "brightness": 120, "autoBrightness": True,
+                                        "order": ["codex"], "disabled": [], "activeApp": "codex"}))
             exit_mode(client, path)
             client.patch_settings.assert_called_once_with({"autoBrightness": True, "brightness": 120})
+            client.activate_app.assert_called_once_with("codex", fast=True)
             self.assertFalse(path.exists())

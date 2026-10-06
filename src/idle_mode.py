@@ -10,7 +10,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from awtrix import Awtrix
 
-APP_NAME = "pixel-fireplace"
+APP_NAME = "Pixel-Fireplace"
+IDLE_APP_NAMES = {APP_NAME, "pixel-fireplace"}
 DEFAULT_STATE = ".idle-mode-state.json"
 DEFAULT_TIMEZONE = "America/New_York"
 DEFAULT_BRIGHTNESS = 10
@@ -71,9 +72,14 @@ def enter(client, state_path, brightness):
     if not state or not state.get("active"):
         save_state(state_path, {"active": True, "brightness": settings.get("brightness", 120),
                                 "autoBrightness": settings.get("autoBrightness", False),
-                                "order": [app["name"] for app in apps if app.get("inLoop")],
-                                "disabled": [app["name"] for app in apps if not app.get("enabled")]})
-    client.install_script(APP_NAME, SOURCE.read_text())
+                                "order": [app["name"] for app in apps if app.get("inLoop") and app["name"] not in IDLE_APP_NAMES],
+                                "disabled": [app["name"] for app in apps if not app.get("enabled") and app["name"] not in IDLE_APP_NAMES],
+                                "activeApp": next((app["name"] for app in apps if app.get("present")), None)})
+    # Preserve the original AWTRIX-installed fireplace when present. This lets
+    # existing devices keep their procedural fire animation and avoids replacing
+    # it with the bundled sample script.
+    if not existing:
+        client.install_script(APP_NAME, SOURCE.read_text())
     _, apps = client.list_apps()
     client.set_app_order([APP_NAME], [app["name"] for app in apps if app.get("name") != APP_NAME])
     client.patch_settings({"autoBrightness": False, "brightness": brightness})
@@ -88,12 +94,15 @@ def exit_mode(client, state_path):
     _, apps = client.list_apps()
     if any(app.get("name") == APP_NAME and app.get("origin") != "script" for app in apps):
         raise ValueError("AWTRIX has a non-script pixel-fireplace app; refusing to remove it")
-    order = state.get("order", [app["name"] for app in apps if app.get("name") != APP_NAME and app.get("inLoop")]) if state else [app["name"] for app in apps if app.get("name") != APP_NAME and app.get("inLoop")]
-    disabled = state.get("disabled", [app["name"] for app in apps if app.get("name") != APP_NAME and not app.get("enabled")]) if state else [app["name"] for app in apps if app.get("name") != APP_NAME and not app.get("enabled")]
+    order = [name for name in (state.get("order", []) if state else [app["name"] for app in apps if app.get("inLoop")]) if name not in IDLE_APP_NAMES]
+    disabled = [name for name in (state.get("disabled", []) if state else [app["name"] for app in apps if not app.get("enabled")]) if name not in IDLE_APP_NAMES]
     client.set_app_order(order, disabled)
     if state and state.get("active"):
         client.patch_settings({"autoBrightness": bool(state.get("autoBrightness", False)),
                                "brightness": int(state.get("brightness", 120))})
+        active_app = state.get("activeApp")
+        if active_app and active_app in order:
+            client.activate_app(active_app, fast=True)
     client.delete_app(APP_NAME)
     state_path.unlink(missing_ok=True)
 
