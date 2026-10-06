@@ -15,7 +15,6 @@ IDLE_APP_NAMES = {APP_NAME, "pixel-fireplace"}
 DEFAULT_STATE = ".idle-mode-state.json"
 DEFAULT_TIMEZONE = "America/New_York"
 DEFAULT_BRIGHTNESS = 10
-SOURCE = Path(__file__).resolve().parents[1] / "packs" / "halloween" / "pixel-fireplace.be"
 
 
 def in_idle_window(now):
@@ -75,11 +74,8 @@ def enter(client, state_path, brightness):
                                 "order": [app["name"] for app in apps if app.get("inLoop") and app["name"] not in IDLE_APP_NAMES],
                                 "disabled": [app["name"] for app in apps if not app.get("enabled") and app["name"] not in IDLE_APP_NAMES],
                                 "activeApp": next((app["name"] for app in apps if app.get("present")), None)})
-    # Preserve the original AWTRIX-installed fireplace when present. This lets
-    # existing devices keep their procedural fire animation and avoids replacing
-    # it with the bundled sample script.
     if not existing:
-        client.install_script(APP_NAME, SOURCE.read_text())
+        raise ValueError("Original Pixel-Fireplace script is not installed on AWTRIX")
     _, apps = client.list_apps()
     client.set_app_order([APP_NAME], [app["name"] for app in apps if app.get("name") != APP_NAME])
     client.patch_settings({"autoBrightness": False, "brightness": brightness})
@@ -96,6 +92,9 @@ def exit_mode(client, state_path):
         raise ValueError("AWTRIX has a non-script pixel-fireplace app; refusing to remove it")
     order = [name for name in (state.get("order", []) if state else [app["name"] for app in apps if app.get("inLoop")]) if name not in IDLE_APP_NAMES]
     disabled = [name for name in (state.get("disabled", []) if state else [app["name"] for app in apps if not app.get("enabled")]) if name not in IDLE_APP_NAMES]
+    # Keep the user's original script installed for the next overnight run,
+    # but keep it out of the daytime loop.
+    disabled.append(APP_NAME)
     client.set_app_order(order, disabled)
     if state and state.get("active"):
         client.patch_settings({"autoBrightness": bool(state.get("autoBrightness", False)),
@@ -103,7 +102,6 @@ def exit_mode(client, state_path):
         active_app = state.get("activeApp")
         if active_app and active_app in order:
             client.activate_app(active_app, fast=True)
-    client.delete_app(APP_NAME)
     state_path.unlink(missing_ok=True)
 
 
