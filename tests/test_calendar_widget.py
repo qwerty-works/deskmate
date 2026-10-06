@@ -18,6 +18,11 @@ APP = {"name": "google_calendar", "origin": "pushed", "present": True,
        "enabled": True, "inLoop": True}
 EVENT = {"summary": "Private Team sync", "start": {"dateTime": "2026-10-04T17:00:00Z"},
          "end": {"dateTime": "2026-10-04T18:00:00Z"}}
+SECOND_EVENT = {"summary": "Private Retro", "start": {"dateTime": "2026-10-04T19:00:00Z"},
+                "end": {"dateTime": "2026-10-04T20:00:00Z"}}
+CANCELLED_EVENT = {"summary": "Private Cancelled", "status": "cancelled",
+                   "start": {"dateTime": "2026-10-04T17:00:00Z"},
+                   "end": {"dateTime": "2026-10-04T18:00:00Z"}}
 
 
 class CommandTests(unittest.TestCase):
@@ -47,11 +52,34 @@ class CommandTests(unittest.TestCase):
         name, payload = self.client.push_app.call_args.args
         self.assertEqual(name, "google_calendar")
         self.assertEqual(payload["text"], "1:00 PM Private Team sync")
+        self.assertEqual(payload["icon"], "calendardots")
         self.assertEqual(payload["lifetimeMs"], 120000)
         self.assertNotIn("Private Team sync", output.getvalue())
         self.assertIn("Verified google_calendar", output.getvalue())
         self.client.delete_app.assert_not_called()
         self.service.return_value.close.assert_called_once()
+
+    def test_pushes_several_events_as_one_scrolling_line(self):
+        self.fetch.return_value = [CANCELLED_EVENT, SECOND_EVENT, EVENT]
+        with redirect_stdout(io.StringIO()) as output:
+            calendar_widget.run()
+        payload = self.client.push_app.call_args.args[1]
+        self.assertEqual(payload["text"], "1:00 PM Private Team sync | 3:00 PM Private Retro")
+        self.assertEqual(payload["icon"], "calendardots")
+        self.assertEqual(payload["lifetimeMs"], 120000)
+        self.client.delete_app.assert_not_called()
+        self.assertNotIn("Private", output.getvalue())
+
+    def test_underway_push_says_meeting_in_progress(self):
+        self.fetch.return_value = [EVENT, SECOND_EVENT]
+        self.clock.side_effect = None
+        self.clock.return_value = datetime(2026, 10, 4, 17, 30, tzinfo=timezone.utc)
+        with redirect_stdout(io.StringIO()) as output:
+            calendar_widget.run()
+        payload = self.client.push_app.call_args.args[1]
+        self.assertEqual(payload["text"], "meeting in progress | 3:00 PM Private Retro")
+        self.assertEqual(payload["icon"], "calendardots")
+        self.assertNotIn("Private", output.getvalue())
 
     def test_shell_overrides_env_and_relative_paths_resolve_from_repo(self):
         (self.root / ".env").write_text("AWTRIX_HOST=http://file\n"
@@ -82,17 +110,50 @@ class CommandTests(unittest.TestCase):
                 self.factory.assert_not_called()
                 boundary.side_effect = None
 
-    def test_refuses_non_pushed_name_for_both_push_and_removal(self):
+    def test_refuses_a_present_non_pushed_name_for_both_push_and_removal(self):
         for events in ([EVENT], []):
-            for origin in ("script", "native", None):
+            for origin in ("script", "native"):
                 with self.subTest(events=events, origin=origin):
                     self.fetch.return_value = events
                     self.client.list_apps.side_effect = None
-                    self.client.list_apps.return_value = (200, [{"name": "google_calendar", "origin": origin}])
+                    self.client.list_apps.return_value = (
+                        200, [{"name": "google_calendar", "origin": origin, "present": True}])
                     with self.assertRaisesRegex(ValueError, "refusing"):
                         calendar_widget.run()
                     self.client.push_app.assert_not_called()
                     self.client.delete_app.assert_not_called()
+
+    def test_tombstone_from_self_removal_does_not_lock_out_the_widget(self):
+        # A pushed app removed by its own lifetimeExpiry leaves origin null and
+        # present false; treating that as a foreign app blocked every later push.
+        tombstone = {"name": "google_calendar", "origin": None, "present": False,
+                     "enabled": True, "inLoop": False}
+        self.client.list_apps.side_effect = [(200, [tombstone]), (200, [APP])]
+        with redirect_stdout(io.StringIO()):
+            calendar_widget.run()
+        self.assertEqual(self.client.push_app.call_args.args[0], "google_calendar")
+        self.assertEqual(self.client.push_app.call_args.args[1]["text"],
+                         "1:00 PM Private Team sync")
+        self.client.delete_app.assert_not_called()
+
+    def test_absent_app_with_null_origin_also_pushes(self):
+        self.client.list_apps.side_effect = [
+            (200, [{"name": "google_calendar", "origin": None}]), (200, [APP])]
+        with redirect_stdout(io.StringIO()):
+            calendar_widget.run()
+        self.client.push_app.assert_called_once()
+        self.client.delete_app.assert_not_called()
+
+    def test_tombstone_with_no_eligible_events_still_hides_normally(self):
+        self.fetch.return_value = []
+        tombstone = {"name": "google_calendar", "origin": None, "present": False,
+                     "enabled": True, "inLoop": False}
+        self.client.list_apps.side_effect = [(200, [tombstone]), (200, [tombstone])]
+        with redirect_stdout(io.StringIO()) as output:
+            calendar_widget.run()
+        self.client.delete_app.assert_not_called()
+        self.client.push_app.assert_not_called()
+        self.assertIn("hidden", output.getvalue())
 
     def test_empty_calendar_deletes_only_its_pushed_page_and_verifies(self):
         self.fetch.return_value = []
@@ -102,6 +163,30 @@ class CommandTests(unittest.TestCase):
             calendar_widget.run()
         self.client.delete_app.assert_called_once_with("google_calendar")
         self.client.push_app.assert_not_called()
+
+    def test_events_that_are_all_ineligible_hide_the_page_and_verify(self):
+        self.fetch.return_value = [CANCELLED_EVENT]
+        codex = {**APP, "name": "codex"}
+        self.client.list_apps.side_effect = [(200, [APP, codex]), (200, [codex])]
+        with redirect_stdout(io.StringIO()) as output:
+            calendar_widget.run()
+        self.client.delete_app.assert_called_once_with("google_calendar")
+        self.client.push_app.assert_not_called()
+        self.assertIn("hidden", output.getvalue())
+
+    def test_malformed_event_never_hides_or_replaces_the_existing_page(self):
+        self.fetch.return_value = [EVENT, {"start": {"dateTime": "not-a-time"}}]
+        with self.assertRaisesRegex(ValueError, "invalid timed event"):
+            calendar_widget.run()
+        self.client.push_app.assert_not_called()
+        self.client.delete_app.assert_not_called()
+
+    def test_clock_failure_never_deletes_or_replaces_the_existing_page(self):
+        self.client.list_apps.side_effect = ValueError("clock down")
+        with self.assertRaisesRegex(ValueError, "AWTRIX"):
+            calendar_widget.run()
+        self.client.push_app.assert_not_called()
+        self.client.delete_app.assert_not_called()
 
     def test_already_absent_calendar_is_noop(self):
         self.fetch.return_value = []

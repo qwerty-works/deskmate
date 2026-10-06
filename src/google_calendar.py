@@ -22,6 +22,14 @@ from requests.exceptions import RequestException
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events.readonly"]
 
+# Resolved on the device from /ICONS/calendardots.gif; AWTRIX falls back to the
+# icon-less layout if that file is ever removed.
+CALENDAR_ICON = "calendardots"
+
+SEPARATOR = " | "
+
+MAX_LIFETIME_MS = 120_000
+
 
 def save_token(path, credentials):
     """Atomically replace the token, never creating a world-readable copy."""
@@ -140,9 +148,10 @@ class CalendarEvent:
     end: datetime
 
 
-def select_event(events, now):
-    """Choose the earliest ongoing event, otherwise the next within 24 hours."""
+def select_events(events, now, limit=3):
+    """Order the agenda for the next 24 hours: ongoing first, then earliest start."""
     now = now.astimezone(timezone.utc)
+    limit = max(1, int(limit))
     horizon = now + timedelta(hours=24)
     eligible = []
     for item in events:
@@ -168,34 +177,52 @@ def select_event(events, now):
             title = " ".join((item.get("summary") or "").split()) or "Untitled event"
             eligible.append(CalendarEvent(title, start, end))
     # Every ongoing event starts before every future event, so one sort suffices.
-    return min(eligible, key=lambda value: value.start, default=None)
+    eligible.sort(key=lambda value: value.start)
+    return eligible[:limit]
 
 
-def event_payload(event, now, display_zone):
-    """Render at push time and expire before the next start/end transition."""
-    now = now.astimezone(timezone.utc)
-    if event.end <= now:
-        raise ValueError("Selected Calendar event ended during the fetch; rerun to refresh")
-    if event.start <= now:
-        text = "In progress " + event.title
-        boundary = event.end
+def event_text(event, now, display_zone):
+    """The local-time form for one upcoming event; unchanged across DST."""
+    local = event.start.astimezone(display_zone)
+    today = now.astimezone(display_zone).date()
+    if local.date() == today:
+        prefix = ""
+    elif local.date() == today + timedelta(days=1):
+        prefix = "Tomorrow "
     else:
-        local = event.start.astimezone(display_zone)
-        today = now.astimezone(display_zone).date()
-        if local.date() == today:
-            prefix = ""
-        elif local.date() == today + timedelta(days=1):
-            prefix = "Tomorrow "
+        # A 24-hour UTC window can reach two local dates ahead when DST starts.
+        prefix = local.strftime("%b ") + str(local.day) + " "
+    clock = local.strftime("%I:%M %p").lstrip("0")
+    return prefix + clock + " " + event.title
+
+
+def event_payload(events, now, display_zone):
+    """Render one scrolling agenda line and expire at the earliest shown transition."""
+    now = now.astimezone(timezone.utc)
+    if not events:
+        raise ValueError("No eligible Calendar events to display; rerun to refresh")
+    entries = []
+    boundary = None
+    underway = False
+    for event in events:
+        if event.end <= now:
+            raise ValueError("Selected Calendar event ended during the fetch; rerun to refresh")
+        if event.start <= now:
+            # One status marker for the display, but every ongoing end still caps the
+            # lifetime, so the soonest ending meeting wins.
+            underway = True
+            moment = event.end
         else:
-            # A 24-hour UTC window can reach two local dates ahead when DST starts.
-            prefix = local.strftime("%b ") + str(local.day) + " "
-        clock = local.strftime("%I:%M %p").lstrip("0")
-        text = prefix + clock + " " + event.title
-        boundary = event.start
-    lifetime_ms = int(min(120, (boundary - now).total_seconds()) * 1000)
+            entries.append(event_text(event, now, display_zone))
+            moment = event.start
+        boundary = moment if boundary is None else min(boundary, moment)
+    if underway:
+        entries.insert(0, "meeting in progress")
+    text = SEPARATOR.join(entries)
+    lifetime_ms = int(min(MAX_LIFETIME_MS, (boundary - now).total_seconds() * 1000))
     if lifetime_ms < 1:
         raise ValueError("Selected Calendar event expires too soon; rerun to refresh")
-    return {"text": text, "repeat": 1,
+    return {"text": text, "icon": CALENDAR_ICON, "repeat": 1,
             "scroll": {"mode": "wrap", "speed": 100, "direction": "left",
                        "entry": "offscreen", "whenFits": "scroll"},
             "lifetimeMs": lifetime_ms, "lifetimeExpiry": "remove"}

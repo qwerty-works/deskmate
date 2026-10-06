@@ -15,15 +15,21 @@ tests, or the Calendar setup documentation.
   calendar events.
 - Fetch a 24-hour exclusive horizon with `singleEvents=True` and
   `orderBy="startTime"`, follow every page, and compare event times in UTC.
-  Skip all-day, cancelled, and self-declined events. Select the earliest
-  ongoing event, otherwise the earliest upcoming eligible event.
-- Render an ongoing event as `In progress <title>`. Render an upcoming event
-  as local time plus title, with `Tomorrow` or month/day when needed. Hide the
-  `google_calendar` app when there is no eligible event.
-- Set scrolling payload expiry no later than the next event transition and at
-  most two minutes. A no-event result is valid only after a successful,
-  complete fetch; auth, network, malformed-response, and AWTRIX failures must
-  leave existing display content alone and return an error.
+  Skip all-day, cancelled, and self-declined events. `select_events(events, now,
+  limit=3)` returns a list of eligible `CalendarEvent` objects ordered
+  ongoing-first then earliest-start-first; `limit` clamps to at least 1.
+- Render one scrolling agenda line. Set `icon` to `calendardots` by name on
+  every payload; it resolves on the device from `/ICONS/calendardots.gif`, and
+  no GIF is vendored in this repo. Render an underway meeting as exactly
+  `meeting in progress` (no title), then each upcoming event as local time plus
+  title with `Tomorrow` or month/day when needed, and join the entries with the
+  literal `" | "`. Hide the `google_calendar` app when the selected list is
+  empty.
+- Set scrolling payload expiry no later than the soonest start/end transition
+  among the shown events and at most two minutes. A no-event result is valid
+  only after a successful, complete fetch; auth, network, malformed-response,
+  and AWTRIX failures must leave existing display content alone and return an
+  error.
 
 ## Security and operations
 
@@ -43,6 +49,15 @@ tests, or the Calendar setup documentation.
 Use `tests/test_google_calendar.py` and `tests/test_calendar_widget.py` as the
 contract. Include pagination, DST boundaries, invalid provider responses,
 token permissions, collision safety, expiry, and hide-when-clear cases in
-regressions. A real Pi run with no eligible event proves fetch/deployment and
-hide behavior, but does not prove physical scrolling or `In progress` display
-readability; report that distinction.
+regressions. Tests prove the payload shape only: `icon == "calendardots"`,
+`text == "meeting in progress"` for an underway meeting, and the `" | "`-joined
+agenda. They do not prove icon legibility at 8×8 beside a long scrolling line,
+animation playback, or how AWTRIX renders the `" | "` separator — confirm those
+on the physical TC001. A real Pi run with no eligible event proves
+fetch/deployment and hide behavior, but not physical readability; report that
+distinction.
+
+## Plan history
+
+`docs/superpowers/plans/2026-10-06-calendar-icon-and-agenda.md` supersedes
+`docs/superpowers/plans/2026-10-06-meeting-in-progress-icon.md`.

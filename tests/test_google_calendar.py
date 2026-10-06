@@ -19,7 +19,7 @@ from httplib2 import Response
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import google_calendar
-from google_calendar import SCOPES, select_event, event_payload, fetch_events, load_credentials
+from google_calendar import SCOPES, select_events, event_payload, fetch_events, load_credentials
 
 NOW = datetime(2026, 10, 4, 16, 0, tzinfo=timezone.utc)
 ZONE = ZoneInfo("America/New_York")
@@ -34,42 +34,68 @@ def event(start=NOW + timedelta(hours=1), end=NOW + timedelta(hours=2), **extra)
 class SelectionTests(unittest.TestCase):
     def test_earliest_future_event_regardless_of_input_order(self):
         later = event(start=NOW + timedelta(hours=3), end=NOW + timedelta(hours=4))
-        selected = select_event([later, event()], NOW)
-        self.assertEqual(selected.start, NOW + timedelta(hours=1))
+        selected = select_events([later, event()], NOW)
+        self.assertEqual(selected[0].start, NOW + timedelta(hours=1))
 
-    def test_ongoing_event_takes_priority_and_overlap_uses_earliest_start(self):
+    def test_ongoing_events_come_first_then_earliest_start(self):
         earlier = event(start=NOW - timedelta(hours=2), summary="Earlier")
         later = event(start=NOW - timedelta(hours=1), summary="Later")
-        self.assertEqual(select_event([event(), later, earlier], NOW).title, "Earlier")
+        selected = select_events([event(), later, earlier], NOW)
+        self.assertEqual([value.title for value in selected], ["Earlier", "Later", "Team sync"])
+
+    def test_returns_several_events_ordered_by_start(self):
+        third = event(start=NOW + timedelta(hours=5), end=NOW + timedelta(hours=6), summary="Third")
+        first = event(start=NOW + timedelta(hours=1), end=NOW + timedelta(hours=2), summary="First")
+        second = event(start=NOW + timedelta(hours=3), end=NOW + timedelta(hours=4), summary="Second")
+        selected = select_events([third, first, second], NOW)
+        self.assertEqual([value.title for value in selected], ["First", "Second", "Third"])
+
+    def test_default_limit_shows_three_and_drops_the_fourth(self):
+        events = [event(start=NOW + timedelta(hours=index), end=NOW + timedelta(hours=index, minutes=30),
+                        summary=str(index)) for index in range(1, 6)]
+        self.assertEqual([value.title for value in select_events(events, NOW)],
+                         ["1", "2", "3"])
+
+    def test_limit_clamps_to_at_least_one(self):
+        for limit in (0, -3):
+            with self.subTest(limit=limit):
+                events = [event(start=NOW + timedelta(hours=1), end=NOW + timedelta(hours=2), summary="First"),
+                          event(start=NOW + timedelta(hours=3), end=NOW + timedelta(hours=4), summary="Second")]
+                selected = select_events(events, NOW, limit=limit)
+                self.assertEqual([value.title for value in selected], ["First"])
+        events = [event(start=NOW + timedelta(hours=index), end=NOW + timedelta(hours=index, minutes=30),
+                        summary=str(index)) for index in range(1, 6)]
+        self.assertEqual(len(select_events(events, NOW, limit=2)), 2)
 
     def test_excludes_all_day_cancelled_and_self_declined_events(self):
         excluded = [event(status="cancelled"),
                     event(attendees=[{"self": True, "responseStatus": "declined"}]),
                     {"start": {"date": "2026-10-04"}, "end": {"date": "2026-10-05"}}]
-        self.assertIsNone(select_event(excluded, NOW))
+        self.assertEqual(select_events(excluded, NOW), [])
 
     def test_other_attendee_decline_does_not_hide_event(self):
-        self.assertIsNotNone(select_event([event(attendees=[{
+        self.assertTrue(select_events([event(attendees=[{
             "self": False, "responseStatus": "declined"}])], NOW))
 
     def test_exact_start_is_in_progress_and_exact_end_is_excluded(self):
-        selected = select_event([event(start=NOW)], NOW)
-        self.assertEqual(event_payload(selected, NOW, ZONE)["text"], "In progress Team sync")
-        self.assertIsNone(select_event([event(start=NOW - timedelta(hours=1), end=NOW)], NOW))
+        selected = select_events([event(start=NOW)], NOW)
+        self.assertEqual(event_payload(selected, NOW, ZONE)["text"], "meeting in progress")
+        self.assertEqual(select_events([event(start=NOW - timedelta(hours=1), end=NOW)], NOW), [])
 
     def test_24_hour_upper_bound_is_exclusive(self):
-        self.assertIsNone(select_event([event(start=NOW + timedelta(days=1),
-                                            end=NOW + timedelta(days=1, hours=1))], NOW))
+        self.assertEqual(select_events([event(start=NOW + timedelta(days=1),
+                                               end=NOW + timedelta(days=1, hours=1))], NOW), [])
 
     def test_empty_calendar(self):
-        self.assertIsNone(select_event([], NOW))
+        self.assertEqual(select_events([], NOW), [])
 
     def test_whitespace_and_missing_title(self):
-        selected = select_event([event(summary="  Team\n\t sync  ")], NOW)
-        self.assertEqual(selected.title, "Team sync")
+        selected = select_events([event(summary="  Team\n\t sync  ")], NOW)
+        self.assertEqual(selected[0].title, "Team sync")
         for title in (None, "", " \n "):
             with self.subTest(title=title):
-                self.assertEqual(select_event([event(summary=title)], NOW).title, "Untitled event")
+                self.assertEqual(select_events([event(summary=title)], NOW)[0].title,
+                                 "Untitled event")
 
     def test_malformed_timed_event_fails_instead_of_looking_empty(self):
         for bad in ({"start": {"dateTime": "invalid"}},
@@ -78,21 +104,67 @@ class SelectionTests(unittest.TestCase):
                      "end": {"dateTime": "2026-10-04T14:00:00"}}):
             with self.subTest(event=bad):
                 with self.assertRaisesRegex(ValueError, "invalid timed event"):
-                    select_event([bad], NOW)
+                    select_events([bad], NOW)
+
+    def test_malformed_event_is_rejected_even_beside_a_valid_one(self):
+        valid = event(start=NOW + timedelta(hours=1))
+        with self.assertRaisesRegex(ValueError, "invalid timed event"):
+            select_events([valid, {"start": {"dateTime": "not-a-time"}}], NOW)
 
 
 class PayloadTests(unittest.TestCase):
-    def test_upcoming_time_title_and_single_scroll(self):
-        payload = event_payload(select_event([event()], NOW), NOW, ZONE)
+    def test_upcoming_time_title_icon_and_single_scroll(self):
+        payload = event_payload(select_events([event()], NOW), NOW, ZONE)
         self.assertEqual(payload["text"], "1:00 PM Team sync")
+        self.assertEqual(payload["icon"], "calendardots")
         self.assertEqual(payload["repeat"], 1)
         self.assertEqual(payload["scroll"]["mode"], "wrap")
         self.assertEqual(payload["lifetimeMs"], 120000)
         self.assertEqual(payload["lifetimeExpiry"], "remove")
 
+    def test_underway_payload_has_icon_and_no_title(self):
+        payload = event_payload(select_events([event(start=NOW - timedelta(minutes=30),
+                                                      end=NOW + timedelta(hours=1))], NOW), NOW, ZONE)
+        self.assertEqual(payload["text"], "meeting in progress")
+        self.assertEqual(payload["icon"], "calendardots")
+        self.assertNotIn("Team sync", payload["text"])
+
+    def test_icon_mode_is_not_set_so_the_device_default_holds(self):
+        payload = event_payload(select_events([event()], NOW), NOW, ZONE)
+        self.assertNotIn("iconMode", payload)
+
+    def test_multiple_events_join_with_pipes_in_start_order(self):
+        events = [event(start=NOW - timedelta(minutes=30), summary="Standup"),
+                  event(start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=1), summary="One on one"),
+                  event(start=NOW + timedelta(hours=2), end=NOW + timedelta(hours=3), summary="Retro")]
+        payload = event_payload(select_events(events, NOW), NOW, ZONE)
+        self.assertEqual(payload["text"],
+                         "meeting in progress | 12:30 PM One on one | 2:00 PM Retro")
+
+    def test_overlapping_ongoing_events_render_one_marker_and_the_soonest_end(self):
+        first = event(start=NOW - timedelta(minutes=30), end=NOW + timedelta(seconds=90),
+                      summary="First")
+        overlapping = event(start=NOW - timedelta(minutes=20), end=NOW + timedelta(hours=2),
+                            summary="Overlapping")
+        later = event(start=NOW + timedelta(minutes=30), end=NOW + timedelta(hours=1),
+                      summary="Standup")
+        payload = event_payload(select_events([first, overlapping, later], NOW), NOW, ZONE)
+        self.assertEqual(payload["text"], "meeting in progress | 12:30 PM Standup")
+        self.assertEqual(payload["text"].count("meeting in progress"), 1)
+        self.assertEqual(payload["lifetimeMs"], 90000)
+
+    def test_pipe_joined_mix_spans_today_and_tomorrow(self):
+        events = [event(start=NOW + timedelta(hours=1), end=NOW + timedelta(hours=2), summary="Team sync"),
+                  event(start=NOW + timedelta(hours=21), end=NOW + timedelta(hours=22), summary="Standup"),
+                  event(start=NOW + timedelta(hours=23, minutes=30),
+                        end=NOW + timedelta(hours=24, minutes=30), summary="Offsite")]
+        payload = event_payload(select_events(events, NOW), NOW, ZONE)
+        self.assertEqual(payload["text"],
+                         "1:00 PM Team sync | Tomorrow 9:00 AM Standup | Tomorrow 11:30 AM Offsite")
+
     def test_tomorrow_prefix_uses_display_timezone(self):
-        selected = select_event([event(start=NOW + timedelta(hours=21),
-                                       end=NOW + timedelta(hours=22))], NOW)
+        selected = select_events([event(start=NOW + timedelta(hours=21),
+                                        end=NOW + timedelta(hours=22))], NOW)
         self.assertEqual(event_payload(selected, NOW, ZONE)["text"],
                          "Tomorrow 9:00 AM Team sync")
 
@@ -100,36 +172,70 @@ class PayloadTests(unittest.TestCase):
         for start, end in ((NOW + timedelta(seconds=30), NOW + timedelta(minutes=5)),
                            (NOW - timedelta(minutes=5), NOW + timedelta(seconds=30))):
             with self.subTest(start=start):
-                payload = event_payload(select_event([event(start=start, end=end)], NOW), NOW, ZONE)
+                payload = event_payload(select_events([event(start=start, end=end)], NOW), NOW, ZONE)
                 self.assertEqual(payload["lifetimeMs"], 30000)
 
+    def test_expiration_uses_the_earliest_transition_in_the_whole_list(self):
+        ongoing = event(start=NOW - timedelta(minutes=5), end=NOW + timedelta(seconds=40),
+                        summary="Standup")
+        soon = event(start=NOW + timedelta(seconds=20), end=NOW + timedelta(minutes=5),
+                     summary="One on one")
+        later = event(start=NOW + timedelta(hours=3), end=NOW + timedelta(hours=4), summary="Retro")
+        payload = event_payload(select_events([later, soon, ongoing], NOW), NOW, ZONE)
+        self.assertEqual(payload["text"],
+                         "meeting in progress | 12:00 PM One on one | 3:00 PM Retro")
+        self.assertEqual(payload["lifetimeMs"], 20000)
+
+    def test_expiration_stays_capped_at_120_seconds_across_the_list(self):
+        events = [event(start=NOW - timedelta(minutes=5), end=NOW + timedelta(hours=2), summary="Standup"),
+                  event(start=NOW + timedelta(hours=1), end=NOW + timedelta(hours=2), summary="One on one")]
+        payload = event_payload(select_events(events, NOW), NOW, ZONE)
+        self.assertEqual(payload["lifetimeMs"], 120000)
+
+    def test_no_eligible_event_cannot_be_rendered(self):
+        with self.assertRaisesRegex(ValueError, "No eligible"):
+            event_payload([], NOW, ZONE)
+
     def test_event_that_ended_during_preflight_is_not_pushed(self):
-        selected = select_event([event()], NOW)
+        selected = select_events([event()], NOW)
         with self.assertRaisesRegex(ValueError, "ended"):
             event_payload(selected, NOW + timedelta(hours=2), ZONE)
 
     def test_start_crossed_during_preflight_changes_to_in_progress(self):
-        selected = select_event([event(start=NOW + timedelta(seconds=1))], NOW)
+        selected = select_events([event(start=NOW + timedelta(seconds=1))], NOW)
         payload = event_payload(selected, NOW + timedelta(seconds=2), ZONE)
-        self.assertEqual(payload["text"], "In progress Team sync")
+        self.assertEqual(payload["text"], "meeting in progress")
+        self.assertEqual(payload["icon"], "calendardots")
 
     def test_dst_fallback_uses_absolute_instants(self):
         now = datetime(2026, 11, 1, 5, 45, tzinfo=timezone.utc)
-        selected = select_event([event(start=datetime(2026, 11, 1, 6, 30, tzinfo=timezone.utc),
-                                       end=datetime(2026, 11, 1, 7, 30, tzinfo=timezone.utc))], now)
+        selected = select_events([event(start=datetime(2026, 11, 1, 6, 30, tzinfo=timezone.utc),
+                                        end=datetime(2026, 11, 1, 7, 30, tzinfo=timezone.utc))], now)
         self.assertEqual(event_payload(selected, now, ZONE)["text"], "1:30 AM Team sync")
 
     def test_dst_spring_forward(self):
         now = datetime(2026, 3, 8, 6, 45, tzinfo=timezone.utc)
-        selected = select_event([event(start=datetime(2026, 3, 8, 7, 30, tzinfo=timezone.utc),
-                                       end=datetime(2026, 3, 8, 8, 30, tzinfo=timezone.utc))], now)
+        selected = select_events([event(start=datetime(2026, 3, 8, 7, 30, tzinfo=timezone.utc),
+                                        end=datetime(2026, 3, 8, 8, 30, tzinfo=timezone.utc))], now)
         self.assertEqual(event_payload(selected, now, ZONE)["text"], "3:30 AM Team sync")
 
     def test_24_hours_across_spring_dst_can_reach_day_after_tomorrow(self):
         now = datetime(2026, 3, 8, 4, 45, tzinfo=timezone.utc)  # Mar 7, 11:45 PM locally
         start = now + timedelta(hours=23, minutes=45)  # Mar 9, 12:30 AM locally
-        selected = select_event([event(start=start, end=start + timedelta(hours=1))], now)
+        selected = select_events([event(start=start, end=start + timedelta(hours=1))], now)
         self.assertEqual(event_payload(selected, now, ZONE)["text"], "Mar 9 12:30 AM Team sync")
+
+    def test_agenda_spanning_dst_spring_forward_keeps_local_time(self):
+        now = datetime(2026, 3, 8, 4, 45, tzinfo=timezone.utc)  # Mar 7, 11:45 PM locally
+        morning = datetime(2026, 3, 8, 13, 0, tzinfo=timezone.utc)  # Mar 8, 9:00 AM EDT
+        evening = datetime(2026, 3, 8, 22, 0, tzinfo=timezone.utc)  # Mar 8, 6:00 PM EDT
+        past_midnight = datetime(2026, 3, 9, 4, 0, tzinfo=timezone.utc)  # Mar 9, 12:00 AM EDT
+        events = [event(start=past_midnight, end=past_midnight + timedelta(hours=1), summary="Today"),
+                  event(start=morning, end=morning + timedelta(hours=1), summary="Standup"),
+                  event(start=evening, end=evening + timedelta(hours=1), summary="Retro")]
+        payload = event_payload(select_events(events, now), now, ZONE)
+        self.assertEqual(payload["text"],
+                         "Tomorrow 9:00 AM Standup | Tomorrow 6:00 PM Retro | Mar 9 12:00 AM Today")
 
 
 class FetchTests(unittest.TestCase):

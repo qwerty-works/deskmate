@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 
 from awtrix import Awtrix
-from google_calendar import calendar_service, event_payload, fetch_events, load_credentials, select_event
+from google_calendar import calendar_service, event_payload, fetch_events, load_credentials, select_events
 
 
 APP_NAME = "google_calendar"
@@ -57,12 +57,15 @@ def run(authorize=False):
 
     client = Awtrix(os.environ.get("AWTRIX_HOST", "http://192.168.4.94"))
     _, apps = awtrix_call(client.list_apps)
-    if any(app.get("name") == APP_NAME and app.get("origin") != "pushed" for app in apps):
+    # A pushed app that removed itself leaves an origin-null tombstone, which is
+    # not an app we could replace; only refuse a present foreign one.
+    if any(app.get("name") == APP_NAME and app.get("present") is True
+           and app.get("origin") not in (None, "pushed") for app in apps):
         raise ValueError("AWTRIX has a non-pushed google_calendar app; refusing to replace or delete it")
     # Select again after the API and preflight requests: an event may have ended.
     now = utcnow()
-    selected = select_event(events, now)
-    if selected is None:
+    selected = select_events(events, now)
+    if not selected:
         if any(app.get("name") == APP_NAME and app.get("present") is True for app in apps):
             awtrix_call(client.delete_app, APP_NAME)
             _, apps = awtrix_call(client.list_apps)

@@ -3,8 +3,9 @@
 One command queries real Codex usage and sends one `codex` pushed app to the TC001.
 AWTRIX owns displaying it and rotating it alongside your other apps.
 
-An independent [Google Calendar widget](docs/google-calendar.md) shows your next
-event's local time and title, or `In progress` during a meeting. It runs on the
+An independent [Google Calendar widget](docs/google-calendar.md) shows up to
+three events' local times and titles on one scrolling line with the
+`calendardots` icon, or `meeting in progress` during a meeting. It runs on the
 Pi every minute and hides when the next 24 hours are clear.
 
 The selected 32×8 layout shows everything at once:
