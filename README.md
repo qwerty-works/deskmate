@@ -206,10 +206,11 @@ python -m unittest discover -s tests -v
 
 ## Overnight Pixel Fireplace mode
 
-Install `packs/halloween/pixel-fireplace.be` in the AWTRIX NG Scripts page once,
-or let `idle_mode.py enter` install it through the HTTP API. The controller keeps
-the current brightness and app loop in a private state file, dims the display to
-10/255 by default, and restores both at 6:00am.
+The controller uses the existing AWTRIX `Pixel-Fireplace` script, keeping its
+procedural fire animation intact. If the script is absent, it installs the
+bundled fallback from `packs/halloween/pixel-fireplace.be`. It keeps the current
+brightness and app loop in a private state file, dims the display to 10/255 by
+default, and restores both at 6:00am.
 
 The schedule uses New York time and can be adjusted with `IDLE_TIMEZONE`,
 `IDLE_BRIGHTNESS`, and `IDLE_STATE_PATH`. Add these entries to the Pi user's
