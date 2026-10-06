@@ -92,6 +92,9 @@ def exit_mode(client, state_path):
         raise ValueError("AWTRIX has a non-script pixel-fireplace app; refusing to remove it")
     order = [name for name in (state.get("order", []) if state else [app["name"] for app in apps if app.get("inLoop")]) if name not in IDLE_APP_NAMES]
     disabled = [name for name in (state.get("disabled", []) if state else [app["name"] for app in apps if not app.get("enabled")]) if name not in IDLE_APP_NAMES]
+    # Keep the user's original script installed for the next overnight run,
+    # but keep it out of the daytime loop.
+    disabled.append(APP_NAME)
     client.set_app_order(order, disabled)
     if state and state.get("active"):
         client.patch_settings({"autoBrightness": bool(state.get("autoBrightness", False)),
@@ -99,7 +102,6 @@ def exit_mode(client, state_path):
         active_app = state.get("activeApp")
         if active_app and active_app in order:
             client.activate_app(active_app, fast=True)
-    client.delete_app(APP_NAME)
     state_path.unlink(missing_ok=True)
 
 

@@ -42,7 +42,7 @@ class IdleModeTests(unittest.TestCase):
             self.assertEqual(state, {"active": True, "brightness": 120, "autoBrightness": True,
                                      "order": [], "disabled": [], "activeApp": "Pixel-Fireplace"})
 
-    def test_exit_restores_and_removes_state(self):
+    def test_exit_restores_and_disables_original_without_removing_it(self):
         client = Mock()
         client.list_apps.return_value = (200, [{"name": "Pixel-Fireplace", "origin": "script",
                                                 "enabled": True, "inLoop": True, "present": True}])
@@ -51,6 +51,8 @@ class IdleModeTests(unittest.TestCase):
             path.write_text(json.dumps({"active": True, "brightness": 120, "autoBrightness": True,
                                         "order": ["codex"], "disabled": [], "activeApp": "codex"}))
             exit_mode(client, path)
+            client.set_app_order.assert_called_once_with(["codex"], ["Pixel-Fireplace"])
             client.patch_settings.assert_called_once_with({"autoBrightness": True, "brightness": 120})
             client.activate_app.assert_called_once_with("codex", fast=True)
+            client.delete_app.assert_not_called()
             self.assertFalse(path.exists())
