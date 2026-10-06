@@ -15,7 +15,6 @@ IDLE_APP_NAMES = {APP_NAME, "pixel-fireplace"}
 DEFAULT_STATE = ".idle-mode-state.json"
 DEFAULT_TIMEZONE = "America/New_York"
 DEFAULT_BRIGHTNESS = 10
-SOURCE = Path(__file__).resolve().parents[1] / "packs" / "halloween" / "pixel-fireplace.be"
 
 
 def in_idle_window(now):
@@ -75,11 +74,8 @@ def enter(client, state_path, brightness):
                                 "order": [app["name"] for app in apps if app.get("inLoop") and app["name"] not in IDLE_APP_NAMES],
                                 "disabled": [app["name"] for app in apps if not app.get("enabled") and app["name"] not in IDLE_APP_NAMES],
                                 "activeApp": next((app["name"] for app in apps if app.get("present")), None)})
-    # Preserve the original AWTRIX-installed fireplace when present. This lets
-    # existing devices keep their procedural fire animation and avoids replacing
-    # it with the bundled sample script.
     if not existing:
-        client.install_script(APP_NAME, SOURCE.read_text())
+        raise ValueError("Original Pixel-Fireplace script is not installed on AWTRIX")
     _, apps = client.list_apps()
     client.set_app_order([APP_NAME], [app["name"] for app in apps if app.get("name") != APP_NAME])
     client.patch_settings({"autoBrightness": False, "brightness": brightness})

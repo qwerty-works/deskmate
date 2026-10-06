@@ -207,8 +207,8 @@ python -m unittest discover -s tests -v
 ## Overnight Pixel Fireplace mode
 
 The controller uses the existing AWTRIX `Pixel-Fireplace` script, keeping its
-procedural fire animation intact. If the script is absent, it installs the
-bundled fallback from `packs/halloween/pixel-fireplace.be`. It keeps the current
+procedural fire animation intact. The script must already be installed on the
+clock; idle mode refuses to substitute another animation. It keeps the current
 brightness and app loop in a private state file, dims the display to 10/255 by
 default, and restores both at 6:00am.
 
