@@ -9,12 +9,14 @@ import sys
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from awtrix import Awtrix
+from awtrix_takeover import claim, guarded, release
 
 APP_NAME = "Pixel-Fireplace"
 IDLE_APP_NAMES = {APP_NAME, "pixel-fireplace"}
 DEFAULT_STATE = ".idle-mode-state.json"
 DEFAULT_TIMEZONE = "America/New_York"
 DEFAULT_BRIGHTNESS = 10
+DEFAULT_MEETING_STATE = ".meeting-mode-state.json"
 
 
 def in_idle_window(now):
@@ -40,19 +42,9 @@ def config():
     return zone, brightness, state
 
 
-def load_state(path):
-    try:
-        return json.loads(path.read_text()) if path.exists() else None
-    except (OSError, ValueError) as exc:
-        raise ValueError("Idle state file is unreadable; remove it after checking the device state") from exc
-
-
-def save_state(path, state):
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    temporary = path.with_name("." + path.name + ".tmp")
-    temporary.write_text(json.dumps(state) + "\n")
-    temporary.chmod(0o600)
-    temporary.replace(path)
+def meeting_state_path():
+    path = Path(os.environ.get("MEETING_STATE_PATH", DEFAULT_MEETING_STATE)).expanduser()
+    return path if path.is_absolute() else Path(__file__).resolve().parents[1] / path
 
 
 def verify_app(apps):
@@ -62,47 +54,22 @@ def verify_app(apps):
 
 
 def enter(client, state_path, brightness):
+    # Idle mode drives the user's own script; it never substitutes a bundled animation.
     _, apps = client.list_apps()
-    existing = next((app for app in apps if app.get("name") == APP_NAME), None)
-    if existing and existing.get("origin") != "script":
-        raise ValueError("AWTRIX has a non-script pixel-fireplace app; refusing to replace it")
-    _, settings = client.get_settings()
-    state = load_state(state_path)
-    if not state or not state.get("active"):
-        save_state(state_path, {"active": True, "brightness": settings.get("brightness", 120),
-                                "autoBrightness": settings.get("autoBrightness", False),
-                                "order": [app["name"] for app in apps if app.get("inLoop") and app["name"] not in IDLE_APP_NAMES],
-                                "disabled": [app["name"] for app in apps if not app.get("enabled") and app["name"] not in IDLE_APP_NAMES],
-                                "activeApp": next((app["name"] for app in apps if app.get("present")), None)})
-    if not existing:
+    if not any(app.get("name") == APP_NAME and app.get("origin") == "script" for app in apps):
         raise ValueError("Original Pixel-Fireplace script is not installed on AWTRIX")
-    _, apps = client.list_apps()
-    client.set_app_order([APP_NAME], [app["name"] for app in apps if app.get("name") != APP_NAME])
-    client.patch_settings({"autoBrightness": False, "brightness": brightness})
-    client.activate_app(APP_NAME)
+    state = claim(client, state_path, APP_NAME, IDLE_APP_NAMES, brightness,
+                  meeting_state_path(), call=guarded)
+    if state is None:
+        return False
     _, apps = client.list_apps()
     if not verify_app(apps):
         raise ValueError("Pixel Fireplace was not verified present, enabled and inLoop")
+    return True
 
 
 def exit_mode(client, state_path):
-    state = load_state(state_path)
-    _, apps = client.list_apps()
-    if any(app.get("name") == APP_NAME and app.get("origin") != "script" for app in apps):
-        raise ValueError("AWTRIX has a non-script pixel-fireplace app; refusing to remove it")
-    order = [name for name in (state.get("order", []) if state else [app["name"] for app in apps if app.get("inLoop")]) if name not in IDLE_APP_NAMES]
-    disabled = [name for name in (state.get("disabled", []) if state else [app["name"] for app in apps if not app.get("enabled")]) if name not in IDLE_APP_NAMES]
-    # Keep the user's original script installed for the next overnight run,
-    # but keep it out of the daytime loop.
-    disabled.append(APP_NAME)
-    client.set_app_order(order, disabled)
-    if state and state.get("active"):
-        client.patch_settings({"autoBrightness": bool(state.get("autoBrightness", False)),
-                               "brightness": int(state.get("brightness", 120))})
-        active_app = state.get("activeApp")
-        if active_app and active_app in order:
-            client.activate_app(active_app, fast=True)
-    state_path.unlink(missing_ok=True)
+    release(client, state_path, APP_NAME, IDLE_APP_NAMES, call=guarded)
 
 
 def run(command):
@@ -112,7 +79,9 @@ def run(command):
     if command == "sync":
         command = "enter" if in_idle_window(now) else "exit"
     if command == "enter":
-        enter(client, state_path, brightness)
+        if not enter(client, state_path, brightness):
+            print("Pixel Fireplace idle mode deferred: a meeting animation is active", flush=True)
+            return
         print("Verified Pixel Fireplace idle mode", flush=True)
     else:
         exit_mode(client, state_path)
