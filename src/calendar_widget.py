@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from awtrix import Awtrix
 from google_calendar import calendar_service, event_payload, fetch_events, load_credentials, select_events
+import meeting_mode
 
 
 APP_NAME = "google_calendar"
@@ -18,6 +19,10 @@ APP_NAME = "google_calendar"
 
 def utcnow():
     return datetime.now(timezone.utc)
+
+
+def ongoing(event, now):
+    return event.start <= now.astimezone(timezone.utc) < event.end
 
 
 def awtrix_call(method, *args):
@@ -65,6 +70,16 @@ def run(authorize=False):
     # Select again after the API and preflight requests: an event may have ended.
     now = utcnow()
     selected = select_events(events, now)
+    # The wave is poll-driven: this once-a-minute run decides whether it holds the display.
+    brightness, wave_state, idle_state = meeting_mode.config()
+    if any(ongoing(event, now) for event in selected):
+        # A meeting gets the display to itself; the text page would be disabled anyway.
+        meeting_mode.enter(client, wave_state, idle_state, brightness)
+        print("Verified meeting wave is showing for the event in progress")
+        return
+    # Release before any other branch: an emptied calendar must not strand the wave.
+    if meeting_mode.active(wave_state):
+        meeting_mode.exit_mode(client, wave_state)
     if not selected:
         if any(app.get("name") == APP_NAME and app.get("present") is True for app in apps):
             awtrix_call(client.delete_app, APP_NAME)
