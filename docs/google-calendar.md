@@ -11,8 +11,7 @@ then up to three events joined with `" | "`.
 | One timed event today | `1:00 PM Team sync` |
 | Several events today | `1:00 PM One on one \| 3:00 PM Retro` |
 | Next timed event tomorrow | `Tomorrow 9:00 AM Team sync` |
-| Timed event underway | `meeting in progress` |
-| Meeting underway with more events later | `meeting in progress \| 3:00 PM Private Retro` |
+| Timed event underway | Great Wave animation, exclusive |
 | No eligible events within the next 24 hours | Calendar page removed |
 
 The underway marker appears once, even when meetings overlap, and carries no
@@ -33,6 +32,38 @@ manage on that device. If `/ICONS` is ever cleared, AWTRIX silently falls back
 to the icon-less layout and the agenda still scrolls. That silent fallback is a
 deliberate, accepted tradeoff of referencing the icon by name instead of
 inlining an asset; it is documented behavior, not an error.
+
+## The meeting wave
+
+While a timed event is underway, the display shows the **Great Wave** animation
+from `packs/transitions` and nothing else. The text page is not pushed for the
+duration of the meeting; it returns on the first run after the event ends.
+
+This replaces the agenda's `meeting in progress` line, which was the earlier
+behavior for an underway meeting. `event_payload` still builds that marker and
+still has its own unit tests, but the widget no longer pushes a page while a
+meeting is running, so the marker is not reachable through the display.
+
+A few details worth knowing:
+
+- The app is named `deskmate-wave`, because AWTRIX app names accept only letters,
+  digits, `_`, and `-`. The `Great Wave` display name still comes from the
+  script's `@name` header.
+- The script stays installed on the clock and is merely switched out of the
+  rotation between meetings, so the next meeting does not reinstall it.
+- The wave is **poll-driven**. The once-a-minute calendar run decides whether it
+  holds the display, so it can outlive a meeting by up to one minute.
+- A meeting outranks overnight idle mode. If a meeting overlaps the fireplace
+  window, the wave takes the display and the dimmed fireplace resumes afterward.
+- `MEETING_BRIGHTNESS` sets the display brightness during a meeting
+  (default `120`); the previous brightness and app order are restored on exit.
+
+If the calendar cron stops while a meeting is underway, the wave can stay on the
+display. Clear it manually:
+
+```sh
+.venv/bin/python src/meeting_mode.py exit
+```
 
 ## Privacy and network security
 
@@ -192,8 +223,8 @@ prove account consent, Pi access, or physical readability.
 
 After real authorization, run once on the Pi and confirm on the **physical TC001**:
 the whole agenda scrolls; the `calendardots` icon renders at 8×8 beside it; a
-meeting underway says `meeting in progress`; `" | "` separates several events
-cleanly; an empty 24-hour window hides the page; and Codex and the other apps
-continue rotating normally.
+meeting underway replaces the page with the wave and returns the page afterward;
+`" | "` separates several events cleanly; an empty 24-hour window hides the page;
+and Codex and the other apps continue rotating normally.
 For HTTP 403, check API enablement, the chosen account's permissions, and quota.
 For connection errors, check the Pi's internet access and `AWTRIX_HOST`.

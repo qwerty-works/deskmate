@@ -18,13 +18,23 @@ tests, or the Calendar setup documentation.
   Skip all-day, cancelled, and self-declined events. `select_events(events, now,
   limit=3)` returns a list of eligible `CalendarEvent` objects ordered
   ongoing-first then earliest-start-first; `limit` clamps to at least 1.
-- Render one scrolling agenda line. Set `icon` to `calendardots` by name on
-  every payload; it resolves on the device from `/ICONS/calendardots.gif`, and
-  no GIF is vendored in this repo. Render an underway meeting as exactly
-  `meeting in progress` (no title), then each upcoming event as local time plus
-  title with `Tomorrow` or month/day when needed, and join the entries with the
-  literal `" | "`. Hide the `google_calendar` app when the selected list is
-  empty.
+- While ANY selected event is ongoing, hand the display to the Great Wave
+  animation exclusively (`deskmate-wave`, driven by `src/meeting_mode.py`) and
+  push no text page for that run. This supersedes the agenda's
+  `meeting in progress` line: `event_payload` still builds that marker and still
+  has unit tests, but the widget no longer pushes a page during a meeting, so it
+  is unreachable through the display. The takeover is poll-driven by the
+  once-a-minute run, so it can outlive a meeting by up to one minute, and
+  `meeting_mode.py exit` is the documented recovery. Release it on the first run
+  with nothing ongoing -- including the emptied-calendar branch, which must not
+  strand the wave -- and restore the snapshotted app order, disabled apps, and
+  brightness.
+- Otherwise render one scrolling agenda line. Set `icon` to `calendardots` by
+  name on every payload; it resolves on the device from
+  `/ICONS/calendardots.gif`, and no GIF is vendored in this repo. Render each
+  upcoming event as local time plus title with `Tomorrow` or month/day when
+  needed, and join the entries with the literal `" | "`. Hide the
+  `google_calendar` app when the selected list is empty.
 - Set scrolling payload expiry no later than the soonest start/end transition
   among the shown events and at most two minutes. A no-event result is valid
   only after a successful, complete fetch; auth, network, malformed-response,
@@ -49,15 +59,17 @@ tests, or the Calendar setup documentation.
 Use `tests/test_google_calendar.py` and `tests/test_calendar_widget.py` as the
 contract. Include pagination, DST boundaries, invalid provider responses,
 token permissions, collision safety, expiry, and hide-when-clear cases in
-regressions. Tests prove the payload shape only: `icon == "calendardots"`,
-`text == "meeting in progress"` for an underway meeting, and the `" | "`-joined
-agenda. They do not prove icon legibility at 8×8 beside a long scrolling line,
-animation playback, or how AWTRIX renders the `" | "` separator — confirm those
-on the physical TC001. A real Pi run with no eligible event proves
-fetch/deployment and hide behavior, but not physical readability; report that
-distinction.
+regressions. Tests prove the payload shape only: `icon == "calendardots"`, the
+`" | "`-joined agenda, and that an ongoing event hands the display to the wave
+instead of pushing a page. They do not prove icon legibility at 8×8 beside a long
+scrolling line, wave animation playback, or how AWTRIX renders the `" | "`
+separator — confirm those on the physical TC001. A real Pi run with no eligible
+event proves fetch/deployment and hide behavior, but not physical readability;
+report that distinction.
 
 ## Plan history
 
-`docs/superpowers/plans/2026-10-06-calendar-icon-and-agenda.md` supersedes
-`docs/superpowers/plans/2026-10-06-meeting-in-progress-icon.md`.
+`docs/superpowers/plans/2026-10-07-meeting-wave-animation.md` supersedes the
+`meeting in progress` display row from
+`docs/superpowers/plans/2026-10-06-calendar-icon-and-agenda.md`, which itself
+supersedes `2026-10-06-meeting-in-progress-icon.md`.
