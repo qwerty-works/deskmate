@@ -7,6 +7,9 @@
 __pycache__/
 *.py[cod]
 
+# Agent planning notes; local working documents, not project documentation.
+/docs/superpowers/plans/
+
 # Local hourly widget output and overlap lock.
 /widget.log
 /.widget.lock
