@@ -1,17 +1,18 @@
 # Color Current — AWTRIX Transition Pack
 
-Color Current is a set of three original full-screen interludes for AWTRIX NG's 32 × 8 display. Aurora gradients, rolling ocean ripples, and woven prism curtains fill all 256 pixels in every animation frame.
+Color Current is a set of four original full-screen interludes for AWTRIX NG's 32 × 8 display. Aurora gradients, ocean ripples, prism curtains, and an indigo wave fill all 256 pixels in every animation frame.
 
-The Berry scripts run between widget apps as interludes. They do not replace the firmware's native transition effects. Aurora Tide and Prism Loom default to three seconds; Ocean Drops defaults to five seconds. Each supports a configurable duration from one to five seconds.
+The Berry scripts run between widget apps as interludes. They do not replace the firmware's native transition effects. Aurora Tide and Prism Loom default to three seconds; Ocean Drops defaults to five seconds; Great Wave defaults to seven seconds. The first three support one to five seconds, and Great Wave supports one to seven seconds.
 
 ## Pack contents
 
 - `aurora-tide.be` — a teal-to-coral aurora wave wipe.
 - `ocean-drops.be` — layered, expanding ocean rings and a moving crest.
 - `prism-loom.be` — sliding color curtains with a bright weaving seam.
+- `great-wave.be` — a curling indigo wave with pale foam highlights.
 - `manifest.json` — animation metadata for the pack.
-- `previews/*.png` — cover frames captured from the AWTRIX NG device.
-- `previews/*.gif` — short animated captures from the AWTRIX NG device.
+- `previews/*.png` — cover frames rendered from Berry source.
+- `previews/*.gif` — animated previews rendered from Berry source.
 - `tools/render.py` — renderer and packager; running it creates GIF/PNG previews, an offline gallery, and the ZIP bundle.
 
 ## AWTRIX Hub
@@ -37,7 +38,7 @@ The build tool uses the Berry interpreter and Pillow. From the repository root, 
 python3 packs/transitions/tools/render.py --berry /path/to/berry
 ```
 
-The renderer checks source lifecycle and duration behavior, 200 sampled frames, full 256-pixel color coverage on every frame, color variation, and the five-second GIF timing before it writes the previews, manifest, gallery, and ZIP.
+The renderer checks lifecycle and duration behavior, 200 frames per configured duration, full-panel RGB coverage, motion and color variation, exact GIF timing and pixel parity, and Great Wave's exact-cycle seam. It builds outputs in staging before publishing previews, manifest, gallery, and ZIP. A Berry interpreter is required; these generated files may be absent until the build succeeds.
 
 ## Compatibility note
 

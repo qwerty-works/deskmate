@@ -22,6 +22,13 @@
       "description": "Color curtains weave around a bright seam, then resolve into a warm glow.",
       "durationMs": 3000,
       "style": "COLOR CURTAINS"
+    },
+    {
+      "id": "great-wave",
+      "name": "Great Wave",
+      "description": "An original indigo wave curls and rolls across the display in a woodblock-inspired palette.",
+      "durationMs": 7000,
+      "style": "WOODBLOCK WAVE"
     }
   ]
 }
