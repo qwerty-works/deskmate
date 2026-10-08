@@ -5,8 +5,9 @@ AWTRIX owns displaying it and rotating it alongside your other apps.
 
 An independent [Google Calendar widget](docs/google-calendar.md) shows up to
 three events' local times and titles on one scrolling line with the
-`calendardots` icon, or `meeting in progress` during a meeting. It runs on the
-Pi every minute and hides when the next 24 hours are clear.
+`calendardots` icon, and replaces the display with the Great Wave animation
+while a meeting is underway. It runs on the Pi every minute and hides when the
+next 24 hours are clear.
 
 The selected 32×8 layout shows everything at once:
 
@@ -56,6 +57,7 @@ loaded relative to the project, even when you run the script from another direct
 | `CODEX_MAX_AGE_SECONDS` | `3600` | Maximum age of returned metrics and display lifetime, in seconds |
 | `CODEX_SSH_HOST` | empty | Query locally, or use `user@mac` / an SSH config alias |
 | `CODEX_HOME` | `~/.codex` | Codex data directory; in SSH mode this is on the Mac |
+| `MEETING_BRIGHTNESS` | `120` | Display brightness while a calendar meeting is underway |
 
 Leave `CODEX_HOME` blank for the normal location. The reader also honors the remote
 Mac's existing `CODEX_HOME` environment variable when no explicit path is supplied.
@@ -226,6 +228,9 @@ CRON_TZ=America/New_York
 
 The controller refuses to replace a non-script app named `pixel-fireplace`,
 and verifies the script is present, enabled, and in the loop after entry.
+
+Idle mode stands down while a calendar meeting is showing the Great Wave
+animation, and the dimmed fireplace resumes when that meeting ends.
 
 After changing code, rerun the tests and `python src/main.py`. For another checkout
 on the Pi, commit/push the intended changes from your development machine, then:

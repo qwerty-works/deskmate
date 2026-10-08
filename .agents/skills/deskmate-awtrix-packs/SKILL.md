@@ -14,10 +14,15 @@ associated render/test workflow.
   (`packs/halloween/tools/render.py` or `packs/transitions/tools/render.py`)
   and its `build()` checks rather than hand-editing generated previews or ZIPs.
 - A valid build verifies Berry execution, lifecycle/config behavior, 200 frames,
-  256-pixel RGB bounds, meaningful motion/color variation, GIF pixel parity, an
-  exact 5000ms cycle, gallery/contact sheet output, manifest metadata, and a
-  reproducible ZIP. Preserve the pack's stricter full-panel-color checks where
-  they already apply.
+  256-pixel RGB bounds, meaningful motion/color variation, GIF pixel parity, the
+  animation's registered cycle, gallery/contact sheet output, manifest metadata,
+  and a reproducible ZIP. Preserve the pack's stricter full-panel-color checks
+  where they already apply.
+- `great-wave.be` is also consumed at runtime by `src/meeting_mode.py`, which
+  installs it as the `deskmate-wave` app during calendar meetings. Its 7000 ms
+  default, its 1000–7000 clamp, and its seamless cycle are a product contract
+  for that path, not only a preview concern, so treat a change to any of them as
+  a behavior change for the meeting display.
 - Keep source `.be`, previews, manifest, README/license, and ZIP contents
   coherent. Generated artifacts are outputs of the renderer, not independent
   sources of truth.

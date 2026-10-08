@@ -3,6 +3,7 @@
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 import io
+import json
 import os
 from pathlib import Path
 import sys
@@ -23,6 +24,10 @@ SECOND_EVENT = {"summary": "Private Retro", "start": {"dateTime": "2026-10-04T19
 CANCELLED_EVENT = {"summary": "Private Cancelled", "status": "cancelled",
                    "start": {"dateTime": "2026-10-04T17:00:00Z"},
                    "end": {"dateTime": "2026-10-04T18:00:00Z"}}
+ONGOING = {"summary": "Private Team sync", "start": {"dateTime": "2026-10-04T15:00:00Z"},
+           "end": {"dateTime": "2026-10-04T18:00:00Z"}}
+WAVE_APP = {"name": "deskmate-wave", "origin": "script", "present": True,
+            "enabled": True, "inLoop": True, "error": None}
 
 
 class CommandTests(unittest.TestCase):
@@ -44,6 +49,7 @@ class CommandTests(unittest.TestCase):
         self.clock, self.auth, self.service, self.fetch, self.factory = values[2:]
         self.client = self.factory.return_value
         self.client.list_apps.side_effect = [(200, []), (200, [APP])]
+        self.client.get_settings.return_value = (200, {"brightness": 120, "autoBrightness": False})
         self.client.push_app.return_value = 200
 
     def test_pushes_calendar_and_verifies_without_logging_title(self):
@@ -70,15 +76,18 @@ class CommandTests(unittest.TestCase):
         self.client.delete_app.assert_not_called()
         self.assertNotIn("Private", output.getvalue())
 
-    def test_underway_push_says_meeting_in_progress(self):
+    def test_underway_meeting_hands_the_display_to_the_wave(self):
+        # An underway meeting takes the display exclusively, so the agenda's
+        # "meeting in progress" line is not pushed for this run.
+        os.environ["MEETING_STATE_PATH"] = str(self.root / ".meeting-mode-state.json")
         self.fetch.return_value = [EVENT, SECOND_EVENT]
         self.clock.side_effect = None
         self.clock.return_value = datetime(2026, 10, 4, 17, 30, tzinfo=timezone.utc)
+        self.client.list_apps.side_effect = [(200, [APP]), (200, [APP]),
+                                             (200, [APP]), (200, [APP, WAVE_APP])]
         with redirect_stdout(io.StringIO()) as output:
             calendar_widget.run()
-        payload = self.client.push_app.call_args.args[1]
-        self.assertEqual(payload["text"], "meeting in progress | 3:00 PM Private Retro")
-        self.assertEqual(payload["icon"], "calendardots")
+        self.client.push_app.assert_not_called()
         self.assertNotIn("Private", output.getvalue())
 
     def test_shell_overrides_env_and_relative_paths_resolve_from_repo(self):
@@ -231,6 +240,66 @@ class CommandTests(unittest.TestCase):
             calendar_widget.run()
         self.auth.assert_not_called()
         self.factory.assert_not_called()
+
+    def test_ongoing_meeting_takes_over_the_display_and_skips_the_push(self):
+        os.environ["MEETING_STATE_PATH"] = str(self.root / ".meeting-mode-state.json")
+        self.fetch.return_value = [ONGOING]
+        # The wave is absent on the device, so this run installs it.
+        self.client.list_apps.side_effect = [(200, [APP]), (200, [APP]),
+                                             (200, [APP]), (200, [APP, WAVE_APP])]
+        with redirect_stdout(io.StringIO()):
+            calendar_widget.run()
+        self.client.push_app.assert_not_called()
+        self.client.install_script.assert_called_once()
+        name, source = self.client.install_script.call_args.args
+        self.assertEqual(name, "deskmate-wave")
+        self.assertIn("# @name Great Wave", source)
+
+    def test_no_meeting_never_installs_a_script(self):
+        with redirect_stdout(io.StringIO()):
+            calendar_widget.run()
+        self.client.install_script.assert_not_called()
+        self.client.delete_app.assert_not_called()
+
+    def test_ended_meeting_releases_the_wave_before_pushing_text(self):
+        os.environ["MEETING_STATE_PATH"] = str(self.root / ".meeting-mode-state.json")
+        wave_state = self.root / ".meeting-mode-state.json"
+        wave_state.write_text(json.dumps({"active": True, "brightness": 120, "autoBrightness": False,
+                                          "order": ["google_calendar"], "disabled": [],
+                                          "activeApp": "google_calendar"}))
+        self.client.list_apps.side_effect = None
+        self.client.list_apps.return_value = (200, [APP, WAVE_APP])
+        with redirect_stdout(io.StringIO()):
+            calendar_widget.run()
+        calls = [call.args for call in self.client.set_app_order.call_args_list]
+        self.assertEqual(calls, [(["google_calendar"], ["deskmate-wave"])])
+        self.client.push_app.assert_called_once()
+        self.assertFalse(wave_state.exists())
+
+    def test_emptied_calendar_releases_a_live_wave(self):
+        os.environ["MEETING_STATE_PATH"] = str(self.root / ".meeting-mode-state.json")
+        wave_state = self.root / ".meeting-mode-state.json"
+        wave_state.write_text(json.dumps({"active": True, "brightness": 120, "autoBrightness": False,
+                                          "order": ["codex"], "disabled": [], "activeApp": "codex"}))
+        self.fetch.return_value = []
+        self.client.list_apps.side_effect = None
+        self.client.list_apps.return_value = (200, [WAVE_APP])
+        with redirect_stdout(io.StringIO()):
+            calendar_widget.run()
+        self.client.set_app_order.assert_called_once_with(["codex"], ["deskmate-wave"])
+        self.assertFalse(wave_state.exists())
+
+    def test_fetch_failure_never_touches_a_live_wave(self):
+        os.environ["MEETING_STATE_PATH"] = str(self.root / ".meeting-mode-state.json")
+        wave_state = self.root / ".meeting-mode-state.json"
+        wave_state.write_text(json.dumps({"active": True, "brightness": 120, "autoBrightness": False,
+                                          "order": ["google_calendar"], "disabled": [],
+                                          "activeApp": "google_calendar"}))
+        self.fetch.side_effect = ValueError("Calendar unavailable")
+        with self.assertRaisesRegex(ValueError, "unavailable"):
+            calendar_widget.run()
+        self.client.set_app_order.assert_not_called()
+        self.assertTrue(wave_state.exists())
 
 
 if __name__ == "__main__":
