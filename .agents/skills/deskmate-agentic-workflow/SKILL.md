@@ -1,6 +1,6 @@
 ---
 name: deskmate-agentic-workflow
-description: Plan and execute Desk Mate changes with bounded sub-agent ownership, isolated worktrees, independent review, and verified GitButler integration.
+description: Plan and execute Desk Mate changes with bounded sub-agent ownership, isolated worktrees, independent review, and verified Git integration.
 ---
 
 # Desk Mate agentic workflow
@@ -28,8 +28,8 @@ limitations, and the commit or worktree location.
 
 ## Planning and ownership
 
-Before editing, inspect `AGENTS.md`, the repository graph, current GitButler
-state, dirty files, worktrees, and available test commands. Preserve unrelated
+Before editing, inspect `AGENTS.md`, the repository graph, current Git state,
+dirty files, worktrees, and available test commands. Preserve unrelated
 user changes. Decompose the task into 2–4 meaningful streams and record, for
 each stream, its inputs, exact owned paths, prohibited paths, dependencies,
 acceptance criteria, and verification command.
@@ -54,9 +54,8 @@ stashing, or discarding those changes.
    explicit approval before publication.
 5. Run focused checks, the project's relevant full test suite, and whitespace
    validation before committing or opening a PR.
-6. Use GitButler for branches, commits, pushes, PRs, and history operations.
-   Use `but pr new <branch>` to publish; do not push separately or use
-   `gh pr create` for a GitButler-managed branch.
+6. Use the repository's standard Git workflow for branches, commits, pushes,
+PRs, and history operations. Publish only with explicit user authorization.
 7. Verify the PR diff and required checks, merge only the intended branch, then
    confirm the merged commit is on the target branch. Report any runtime,
    device, or deployment boundary that was not verified.

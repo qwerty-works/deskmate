@@ -30,8 +30,8 @@ or documentation-only publication.
 2. Run `git diff --check` and the relevant documentation/tests or link checks.
 3. Obtain an independent read-only review with an explicit `APPROVE` verdict
    before committing or pushing docs changes when publication is requested.
-4. Use GitButler for the scoped commit/push. Record the exact files and any
-   source-default findings left outside scope.
+4. Use the repository's standard Git workflow for the scoped commit or push.
+   Record the exact files and any source-default findings left outside scope.
 
 Never claim that a clean docs scan proves the entire repository contains no
 private-looking values, and never delete an unmerged branch during cleanup
