@@ -29,6 +29,13 @@
       "description": "An original indigo wave curls and rolls across the display in a woodblock-inspired palette.",
       "durationMs": 7000,
       "style": "WOODBLOCK WAVE"
+    },
+    {
+      "id": "ghost-parade",
+      "name": "Ghost Parade",
+      "description": "Red, pink, cyan, and orange arcade ghosts march across a glowing full-screen backdrop.",
+      "durationMs": 7000,
+      "style": "ARCADE GHOSTS"
     }
   ]
 }
